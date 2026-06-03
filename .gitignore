@@ -1,0 +1,17 @@
+.env
+.env*.local
+node_modules
+.next
+*.log
+*.tsbuildinfo
+data/*.sqlite
+data/*.sqlite-journal
+data/*.db
+prisma/data/*.sqlite
+prisma/data/*.sqlite-journal
+exports/*
+!exports/.gitkeep
+backups/*
+!backups/.gitkeep
+coverage
+for ai/

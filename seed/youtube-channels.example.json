@@ -1,0 +1,8 @@
+[
+  {
+    "name": "YouTube Channel RSS Example",
+    "channel_id": "CHANNEL_ID",
+    "url": "https://www.youtube.com/feeds/videos.xml?channel_id=CHANNEL_ID",
+    "notes": "Replace CHANNEL_ID manually. YouTube is a supporting signal only."
+  }
+]

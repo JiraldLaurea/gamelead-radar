@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Source {
+  id                  String    @id @default(cuid())
+  name                String
+  region              String
+  language            String    @default("en")
+  sourceType          String
+  url                 String    @unique
+  resolvedFeedUrl     String?
+  active              Boolean   @default(true)
+  requiresVerification Boolean  @default(true)
+  verificationStatus  String    @default("needs_review")
+  verificationError   String?
+  lastVerifiedAt      DateTime?
+  consecutiveFailures Int       @default(0)
+  priority            Int       @default(3)
+  reliability         String    @default("medium")
+  maxItemsPerRun      Int       @default(30)
+  parserConfig        String?
+  filterConfig        String?
+  notes               String?
+  crawlFrequencyHours Int       @default(12)
+  lastCrawledAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  articles            Article[]
+}
+
+model Article {
+  id          String        @id @default(cuid())
+  sourceId    String
+  title       String
+  url         String        @unique
+  publishedAt DateTime?
+  author      String?
+  rawContent  String
+  summary     String?
+  language    String?
+  contentHash String        @unique
+  processed   Boolean       @default(false)
+  excluded    Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  source      Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  opportunity Opportunity?
+}
+
+model Company {
+  id                   String        @id @default(cuid())
+  name                 String
+  country              String
+  companyType          String
+  website              String?
+  websiteTitle         String?
+  websiteStatus        String        @default("not_found")
+  contactUrl           String?
+  contactFormUrl       String?
+  contactEmail         String?
+  secondaryEmails      String?
+  contactPhone         String?
+  secondaryPhones      String?
+  facebookUrl          String?
+  instagramUrl         String?
+  linkedinUrl          String?
+  tiktokUrl            String?
+  youtubeUrl           String?
+  twitterUrl           String?
+  businessDescription  String?
+  enrichmentStatus     String        @default("not_started")
+  enrichmentConfidence Int           @default(0)
+  enrichmentSources    String?
+  lastEnrichedAt       DateTime?
+  enrichmentError      String?
+  enrichmentManualNotes String?
+  enrichmentManuallyEdited Boolean   @default(false)
+  notes                String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  opportunities Opportunity[]
+}
+
+model Game {
+  id                 String        @id @default(cuid())
+  title              String
+  platform           String
+  genre              String?
+  steamUrl           String?
+  appStoreUrl        String?
+  googlePlayUrl      String?
+  launchStage        String
+  expectedLaunchDate DateTime?
+  createdAt          DateTime      @default(now())
+  opportunities      Opportunity[]
+}
+
+model Opportunity {
+  id                  String            @id @default(cuid())
+  articleId           String            @unique
+  companyId           String
+  gameId              String
+  targetRegion        String
+  opportunityType     String
+  score               Int
+  grade               String
+  status              String            @default("new")
+  recommendedPackages String
+  reasoning           String
+  evidenceQuotes      String
+  uncertainty         String?
+  nextAction          String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  article             Article           @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  outreachMessages    OutreachMessage[]
+}
+
+model OutreachMessage {
+  id            String      @id @default(cuid())
+  opportunityId String
+  channel       String
+  language      String      @default("en")
+  subject       String?
+  body          String
+  status        String      @default("draft")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+}
+
+model CrawlRun {
+  id             String    @id @default(cuid())
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  status         String
+  articlesFound  Int       @default(0)
+  articlesSaved  Int       @default(0)
+  errorMessage   String?
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String
+  module    String
+  message   String
+  metadata  String?
+  createdAt DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

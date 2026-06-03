@@ -1,0 +1,14 @@
+{
+  "en": {
+    "include": ["coming soon", "global launch", "worldwide release", "closed beta", "open beta", "playtest", "demo", "Steam Next Fest", "early access", "pre-registration", "pre-order", "wishlist", "soft launch", "publishing agreement", "publishing deal"],
+    "exclude": ["review", "impressions", "opinion", "rumor", "leak", "sale", "discount", "patch notes", "ranking", "top grossing", "now available", "out now"]
+  },
+  "ko": {
+    "include": ["출시 예정", "글로벌 출시", "사전예약", "비공개 테스트", "공개 테스트", "CBT", "OBT", "소프트런칭", "스팀 출시", "위시리스트", "퍼블리싱 계약", "신작 공개"],
+    "exclude": ["리뷰", "후기", "루머", "유출", "할인", "순위", "매출", "출시됐다", "정식 출시했다"]
+  },
+  "ja": {
+    "include": ["発売予定", "事前登録", "グローバル配信", "βテスト", "CBT", "OBT", "クローズドβ", "オープンβ", "Steam", "ウィッシュリスト", "パブリッシング契約", "新作発表"],
+    "exclude": ["レビュー", "感想", "噂", "リーク", "セール", "ランキング", "配信開始", "発売中"]
+  }
+}
