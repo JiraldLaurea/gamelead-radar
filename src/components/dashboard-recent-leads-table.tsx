@@ -20,8 +20,9 @@ export function DashboardRecentLeadsTable({ leads }: { leads: DashboardRecentLea
   const router = useRouter();
 
   return (
-    <div className="table-wrap lead-list-table-wrap dashboard-recent-leads-table-wrap">
-      <table className="lead-list-table dashboard-recent-leads-table">
+    <div className="table-wrap">
+      <div className="table-scroll lead-list-table-wrap dashboard-recent-leads-table-wrap">
+        <table className="lead-list-table dashboard-recent-leads-table">
         <thead>
           <tr>
             <th className="lead-grade-column">Grade</th>
@@ -58,7 +59,8 @@ export function DashboardRecentLeadsTable({ leads }: { leads: DashboardRecentLea
             </tr>
           ) : null}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

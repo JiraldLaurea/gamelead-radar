@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Filter, RotateCcw } from "lucide-react";
 import { Shell } from "@/components/shell";
 import { LeadEnrichmentTable } from "@/components/lead-enrichment-table";
 import { getEmailBodyTemplate } from "@/lib/email-template";
@@ -75,8 +76,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             <option value="failed">Failed</option>
             <option value="manual_review">Manual review</option>
           </select>
-          <button className="button" type="submit">Filter</button>
-          <Link className="button secondary" href="/leads">Reset</Link>
+          <button className="button" type="submit"><Filter size={16} /> Filter</button>
+          <Link className="button secondary" href="/leads"><RotateCcw size={16} /> Reset</Link>
         </form>
       </section>
       {params.enriched ? <p className="notice">Enrichment finished for {params.enriched} lead(s).</p> : null}

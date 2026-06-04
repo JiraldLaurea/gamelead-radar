@@ -98,7 +98,7 @@ export function LoadingForm({ action, children, className, loadingLabel = "Worki
                 <div className="loading-spinner" aria-hidden="true" />
                 <p>Please wait while the system finishes this action.</p>
                 <button className="button secondary" type="button" onClick={cancel}>
-                  Cancel
+                  <X size={16} /> Cancel
                 </button>
               </>
             )}

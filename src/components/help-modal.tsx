@@ -33,13 +33,15 @@ export function HelpModal({
                 <X size={18} />
               </button>
             </div>
-            <div className="help-list">
-              {items.map((item) => (
-                <div className="help-row" key={item.label}>
-                  <strong>{item.label}</strong>
-                  <p>{item.description}</p>
-                </div>
-              ))}
+            <div className="modal-scroll">
+              <div className="help-list">
+                {items.map((item) => (
+                  <div className="help-row" key={item.label}>
+                    <strong>{item.label}</strong>
+                    <p>{item.description}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

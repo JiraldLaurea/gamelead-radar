@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, FilePenLine, RotateCcw, Save, SearchCheck, Tag } from "lucide-react";
+import { LeadDetailComposeEmail } from "@/components/lead-detail-compose-email";
 import { LoadingForm } from "@/components/loading-form";
 import { Shell } from "@/components/shell";
+import { getEmailBodyTemplate } from "@/lib/email-template";
 import { prisma } from "@/lib/prisma";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +14,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     include: { company: true, game: true, article: { include: { source: true } }, outreachMessages: true }
   });
   if (!lead) notFound();
+  const emailBodyTemplate = await getEmailBodyTemplate();
   const enrichmentSources = parseJsonArray(lead.company.enrichmentSources);
   const secondaryEmails = parseJsonArray(lead.company.secondaryEmails);
   const secondaryPhones = parseJsonArray(lead.company.secondaryPhones);
@@ -62,7 +65,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <LoadingForm className="actions status-actions" action={`/api/leads/${lead.id}/status`} loadingLabel="Updating lead status">
             {["new", "needs_research", "draft_ready", "contacted", "replied", "rejected", "archived"].map((status) => (
               <button className="button secondary" name="status" value={status} key={status} type="submit" data-loading-label={`Setting status to ${status.replaceAll("_", " ")}`}>
-                {status.replaceAll("_", " ")}
+                <Tag size={16} /> {status.replaceAll("_", " ")}
               </button>
             ))}
             </LoadingForm>
@@ -70,11 +73,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         </section>
         <section className="panel">
           <h2>Contact Enrichment</h2>
-          <p>
+          <p className="enrichment-summary">
             <span className={`badge status-${lead.company.enrichmentStatus}`}>
               {lead.company.enrichmentStatus.replaceAll("_", " ")}
             </span>
-            <span className="inline-muted">{lead.company.enrichmentConfidence}% confidence</span>
+            <span className="enrichment-confidence">{lead.company.enrichmentConfidence}% confidence</span>
           </p>
           {lead.company.enrichmentError ? <p><strong>Error:</strong> {lead.company.enrichmentError}</p> : null}
           <dl className="detail-list">
@@ -97,8 +100,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <dd>{lead.company.contactUrl ? <a href={lead.company.contactUrl} target="_blank">{lead.company.contactUrl}</a> : "Not found"}</dd>
           </dl>
           <div className="actions" style={{ marginBottom: 16 }}>
+            <LeadDetailComposeEmail
+              leadId={lead.id}
+              companyName={lead.company.name}
+              email={lead.company.contactEmail}
+              emailBodyTemplate={emailBodyTemplate}
+            />
             <LoadingForm action={`/api/leads/${lead.id}/enrich`} loadingLabel={enrichmentButtonLabel === "Run enrichment" ? "Running enrichment" : "Re-running enrichment"}>
-              <button className="button" type="submit">{enrichmentButtonLabel}</button>
+              <button className="button secondary" type="submit">
+                {enrichmentButtonLabel === "Run enrichment" ? <SearchCheck size={16} /> : <RotateCcw size={16} />}
+                {enrichmentButtonLabel}
+              </button>
             </LoadingForm>
           </div>
           <LoadingForm action={`/api/leads/${lead.id}/enrichment`} className="form-grid" loadingLabel="Saving enrichment edits">
@@ -114,7 +126,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <label>X / Twitter<input name="twitterUrl" defaultValue={lead.company.twitterUrl ?? ""} /></label>
             <label className="full-span">Manual notes<textarea name="enrichmentManualNotes" defaultValue={lead.company.enrichmentManualNotes ?? ""} /></label>
             <div className="form-actions full-span">
-              <button className="button" type="submit">Save enrichment edits</button>
+              <button className="button" type="submit"><Save size={16} /> Save enrichment edits</button>
             </div>
           </LoadingForm>
           <h2 style={{ marginTop: 18 }}>Enrichment Sources</h2>
@@ -129,7 +141,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         <section className="panel">
           <h2>Outreach Drafts</h2>
           <LoadingForm action={`/api/leads/${lead.id}/drafts`} loadingLabel="Generating outreach drafts" style={{ marginBottom: 16 }}>
-            <button className="button" type="submit">Generate Drafts</button>
+            <button className="button" type="submit"><FilePenLine size={16} /> Generate Drafts</button>
           </LoadingForm>
           {lead.outreachMessages.map((message) => (
             <div className="card" key={message.id} style={{ padding: 14, marginBottom: 12 }}>

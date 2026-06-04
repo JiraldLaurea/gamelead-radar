@@ -1,3 +1,4 @@
+import { BadgeCheck, Power, PowerOff, Plus, Radio, Search } from "lucide-react";
 import { Shell } from "@/components/shell";
 import { HelpModal } from "@/components/help-modal";
 import { LoadingForm } from "@/components/loading-form";
@@ -81,7 +82,7 @@ export default async function SourcesPage() {
             <input name="notes" placeholder="Operational notes" />
           </label>
           <div className="form-actions">
-            <button className="button" type="submit">Add Source</button>
+            <button className="button" type="submit"><Plus size={16} /> Add Source</button>
           </div>
         </LoadingForm>
       </section>
@@ -91,7 +92,8 @@ export default async function SourcesPage() {
           <HelpModal title="Registered Sources Columns" items={registeredSourceHelp} buttonLabel="Table Help" />
         </div>
         <div className="table-wrap">
-          <table>
+          <div className="table-scroll">
+            <table>
             <thead>
               <tr>
                 <th>Source</th>
@@ -139,16 +141,17 @@ export default async function SourcesPage() {
                   <td>
                     <div className="actions source-actions">
                       <LoadingForm action={`/api/sources/${source.id}/verify`} loadingLabel={`Verifying ${source.name}`}>
-                        <button className="button secondary" type="submit">Verify</button>
+                        <button className="button secondary" type="submit"><BadgeCheck size={16} /> Verify</button>
                       </LoadingForm>
                       <LoadingForm action={`/api/sources/${source.id}/discover-rss`} loadingLabel={`Discovering RSS for ${source.name}`}>
-                        <button className="button secondary" type="submit">Discover RSS</button>
+                        <button className="button secondary" type="submit"><Search size={16} /> Discover RSS</button>
                       </LoadingForm>
                       <LoadingForm action={`/api/sources/${source.id}/crawl`} loadingLabel={`Crawling ${source.name}`}>
-                        <button className="button secondary" type="submit">Crawl Now</button>
+                        <button className="button secondary" type="submit"><Radio size={16} /> Crawl Now</button>
                       </LoadingForm>
                       <LoadingForm action={`/api/sources/${source.id}/toggle`} loadingLabel={`${source.active ? "Deactivating" : "Activating"} ${source.name}`}>
                         <button className="button secondary" type="submit">
+                          {source.active ? <PowerOff size={16} /> : <Power size={16} />}
                           {source.active ? "Deactivate" : "Activate"}
                         </button>
                       </LoadingForm>
@@ -157,7 +160,8 @@ export default async function SourcesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </section>
     </Shell>

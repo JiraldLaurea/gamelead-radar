@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronDown, Download, Pencil, RotateCcw, SearchCheck, Send, X } from "lucide-react";
+import Checkbox from "@mui/material/Checkbox";
+import { ChevronDown, Download, Pencil, Plus, RotateCcw, SearchCheck, Send, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { emailSubjectTemplate } from "@/lib/email-template-defaults";
 import { LoadingForm } from "./loading-form";
 
@@ -24,6 +25,18 @@ type LeadRow = {
   email?: string | null;
 };
 
+const checkboxSx = {
+  color: "#667085",
+  "&.Mui-checked": {
+    color: "#0f766e"
+  },
+  "&.MuiCheckbox-indeterminate": {
+    color: "#0f766e"
+  }
+};
+
+const emailPlaceholders = ["[company_name]", "[game_title]", "[opportunity_type]"] as const;
+
 export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTemplate: string; leads: LeadRow[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
@@ -33,7 +46,11 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [emailSubject, setEmailSubject] = useState(emailSubjectTemplate);
   const [emailBody, setEmailBody] = useState(emailBodyTemplate);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const emailAbortRef = useRef<AbortController | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const emailBodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const attachmentInputId = useId();
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const selectedLeads = useMemo(() => leads.filter((lead) => selectedSet.has(lead.id)), [leads, selectedSet]);
   const selectedWithEmail = selectedLeads.filter((lead) => lead.email);
@@ -46,6 +63,19 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
     ["Enriched leads Excel", "/api/export?format=xls&type=enriched"],
     ["Grade A Excel", "/api/export?format=xls&grade=A"]
   ] as const;
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!exportMenuRef.current?.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [showExportMenu]);
 
   function toggleLead(id: string) {
     setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
@@ -62,14 +92,15 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
     const controller = new AbortController();
     emailAbortRef.current = controller;
     try {
+      const formData = new FormData();
+      formData.append("leadIds", JSON.stringify(selectedWithEmail.map((lead) => lead.id)));
+      formData.append("subject", emailSubject);
+      formData.append("body", emailBody);
+      attachments.forEach((file) => formData.append("attachments", file));
+
       const response = await fetch("/api/leads/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leadIds: selectedWithEmail.map((lead) => lead.id),
-          subject: emailSubject,
-          body: emailBody
-        }),
+        body: formData,
         signal: controller.signal
       });
       const payload = (await response.json()) as { success?: boolean; sent?: number; failed?: number; error?: string; results?: Array<{ error?: string }> };
@@ -82,6 +113,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
         text: `Sent ${payload.sent ?? 0} email${payload.sent === 1 ? "" : "s"}${payload.failed ? `, with ${payload.failed} failure(s)` : ""}.`
       });
       setShowEmailModal(false);
+      setAttachments([]);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setEmailNotice({ kind: "error", text: "Email sending was canceled." });
@@ -103,6 +135,35 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
     setEmailBody(emailBodyTemplate);
   }
 
+  function insertEmailPlaceholder(placeholder: string) {
+    const textarea = emailBodyTextareaRef.current;
+    if (!textarea) {
+      setEmailBody((current) => `${current}${current ? " " : ""}${placeholder}`);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextBody = `${emailBody.slice(0, start)}${placeholder}${emailBody.slice(end)}`;
+    setEmailBody(nextBody);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursorPosition = start + placeholder.length;
+      textarea.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  }
+
+  function addAttachments(files: FileList | null) {
+    if (!files) return;
+    const selectedFiles = Array.from(files);
+    setAttachments((current) => [...current, ...selectedFiles].slice(0, 5));
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
   return (
     <>
       {sendingEmail ? (
@@ -117,14 +178,14 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
             <div className="loading-spinner" aria-hidden="true" />
             <p>Please wait while selected outreach emails are sent.</p>
             <button className="button secondary" type="button" onClick={cancelEmailSend}>
-              Cancel
+              <X size={16} /> Cancel
             </button>
           </div>
         </div>
       ) : null}
       {showEmailModal ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="email-compose-title">
-          <div className="compose-modal">
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowEmailModal(false)}>
+          <div className="compose-modal" role="dialog" aria-modal="true" aria-labelledby="email-compose-title" onClick={(event) => event.stopPropagation()}>
             <div className="compose-modal-header">
               <div>
                 <h2 id="email-compose-title">Email selected leads</h2>
@@ -134,26 +195,72 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                 <X size={18} />
               </button>
             </div>
-            <div className="compose-modal-body">
-              <div className="compose-recipients">
-                <span>Recipients</span>
-                <div className="recipient-pills">
-                  {selectedWithEmail.map((lead) => (
-                    <span className="recipient-pill" key={lead.id} title={lead.email ?? undefined}>
-                      {lead.company}
-                    </span>
+            <div className="modal-scroll">
+              <div className="compose-modal-body">
+                <div className="compose-recipients">
+                  <span>Recipients</span>
+                  <div className="recipient-pills">
+                    {selectedWithEmail.map((lead) => (
+                      <span className="recipient-pill" key={lead.id} title={lead.email ?? undefined}>
+                        {lead.company}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <label>
+                  Subject
+                  <input value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} />
+                </label>
+                <label>
+                  Body
+                  <textarea ref={emailBodyTextareaRef} value={emailBody} onChange={(event) => setEmailBody(event.target.value)} rows={10} />
+                </label>
+                <div className="placeholder-button-group" aria-label="Email placeholder insert buttons">
+                  {emailPlaceholders.map((placeholder) => (
+                    <button
+                      className="button secondary compact-button"
+                      key={placeholder}
+                      type="button"
+                      onClick={() => insertEmailPlaceholder(placeholder)}
+                      disabled={sendingEmail}
+                    >
+                      <Plus size={16} /> {placeholder}
+                    </button>
                   ))}
                 </div>
+                <div className="field-group">
+                  <span>Attachments</span>
+                  <input
+                    id={attachmentInputId}
+                    className="file-upload-input"
+                    type="file"
+                    multiple
+                    disabled={sendingEmail}
+                    onChange={(event) => {
+                      addAttachments(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <label className="file-upload-control" htmlFor={attachmentInputId}>
+                    <span className="button secondary compact-button">
+                      <Plus size={16} /> Choose files
+                    </span>
+                  </label>
+                  <span className="field-note">Up to 5 files, 10MB max each file.</span>
+                </div>
+                {attachments.length > 0 ? (
+                  <div className="attachment-list">
+                    {attachments.map((file, index) => (
+                      <span className="attachment-pill" key={`${file.name}-${file.size}-${index}`} title={file.name}>
+                        {file.name}
+                        <button type="button" aria-label={`Remove ${file.name}`} onClick={() => removeAttachment(index)} disabled={sendingEmail}>
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              <label>
-                Subject
-                <input value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} />
-              </label>
-              <label>
-                Body
-                <textarea value={emailBody} onChange={(event) => setEmailBody(event.target.value)} rows={10} />
-              </label>
-              <p className="inline-muted compose-hint">Use [company_name], [game_title], or [opportunity_type] to personalize each email.</p>
             </div>
             <div className="compose-modal-actions">
               <button className="button secondary" type="button" onClick={resetEmailTemplate} disabled={sendingEmail}>
@@ -161,7 +268,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
               </button>
               <div className="compose-modal-action-group">
                 <button className="button secondary" type="button" onClick={() => setShowEmailModal(false)} disabled={sendingEmail}>
-                  Cancel
+                  <X size={16} /> Cancel
                 </button>
                 <button className="button" type="button" onClick={sendSelectedEmails} disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}>
                   <Send size={16} /> {sendingEmail ? "Sending..." : "Send Email"}
@@ -186,7 +293,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
             <Pencil size={16} /> Compose Email
           </button>
         </div>
-        <div className="export-menu">
+        <div className="export-menu" ref={exportMenuRef}>
           <button
             className="button secondary"
             type="button"
@@ -206,18 +313,40 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
           ) : null}
         </div>
       </div>
-      <div className="table-wrap lead-list-table-wrap">
-        <table className="lead-list-table">
+      <div className="table-wrap">
+        <div className="table-scroll lead-list-table-wrap">
+          <table className="lead-list-table">
           <thead>
             <tr>
-              <th className="lead-select-column">
-                <input
-                  aria-label="Select all visible leads"
-                  checked={allVisibleSelected}
-                  className="row-checkbox"
-                  type="checkbox"
-                  onChange={toggleAll}
-                />
+              <th
+                className="lead-select-column select-cell"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (leads.length > 0) toggleAll();
+                }}
+              >
+                <span className="checkbox-hit-area">
+                  <Checkbox
+                    aria-label="Select all visible leads"
+                    checked={allVisibleSelected}
+                    disabled={leads.length === 0}
+                    indeterminate={selected.length > 0 && !allVisibleSelected}
+                    size="small"
+                    sx={checkboxSx}
+                    onChange={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleAll();
+                    }}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        toggleAll();
+                      }
+                    }}
+                  />
+                </span>
               </th>
               <th className="lead-grade-column">Grade</th>
               <th className="lead-company-column">Company</th>
@@ -239,17 +368,35 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                 key={lead.id}
                 onClick={() => router.push(`/leads/${lead.id}`)}
               >
-                <td>
-                  <input
-                    aria-label={`Select ${lead.company}`}
-                    checked={selectedSet.has(lead.id)}
-                    className="row-checkbox"
-                    name="leadIds"
-                    type="checkbox"
-                    value={lead.id}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={() => toggleLead(lead.id)}
-                  />
+                <td
+                  className="select-cell"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleLead(lead.id);
+                  }}
+                >
+                  <span className="checkbox-hit-area">
+                    <Checkbox
+                      aria-label={`Select ${lead.company}`}
+                      checked={selectedSet.has(lead.id)}
+                      name="leadIds"
+                      size="small"
+                      sx={checkboxSx}
+                      value={lead.id}
+                      onChange={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleLead(lead.id);
+                      }}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleLead(lead.id);
+                        }
+                      }}
+                    />
+                  </span>
                 </td>
                 <td><span className={`badge grade-${lead.grade.toLowerCase()}`}>{lead.grade} {lead.score}</span></td>
                 <td>
@@ -271,7 +418,8 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
       </LoadingForm>
     </>

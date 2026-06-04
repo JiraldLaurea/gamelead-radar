@@ -45,7 +45,18 @@ export default async function DashboardPage() {
             <DashboardActionForm action="/api/analyze" kind="analyze" />
           </div>
           <p>Last crawl: {lastRun ? `${lastRun.status} at ${lastRun.startedAt.toLocaleString()}` : "Never"}</p>
-          {errors.length ? <p>Recent error: {errors[0].message}</p> : <p>No recent errors logged.</p>}
+          {errors.length ? (
+            <div className="operation-error-card">
+              <div className="operation-error-header">
+                <span className="badge status-failed">recent error</span>
+                <span>{errors[0].module} · {errors[0].createdAt.toLocaleString()}</span>
+              </div>
+              <p>{errors[0].message}</p>
+              {errors.length > 1 ? <span className="cell-subtle">{errors.length - 1} more recent error(s) logged.</span> : null}
+            </div>
+          ) : (
+            <p className="operation-empty-log">No recent errors logged.</p>
+          )}
         </section>
         <section className="panel">
           <h2>Recent Leads</h2>

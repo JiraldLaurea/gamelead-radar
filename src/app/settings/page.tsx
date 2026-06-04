@@ -1,3 +1,4 @@
+import { DatabaseBackup, SearchCheck, Trash2 } from "lucide-react";
 import { Shell } from "@/components/shell";
 import { LoadingForm } from "@/components/loading-form";
 import { EmailTemplateSettingsForm } from "@/components/email-template-settings-form";
@@ -61,7 +62,7 @@ export default async function SettingsPage({
         <div className="actions">
           <LoadingForm action="/api/settings/serper-test" loadingLabel="Testing Serper">
             <button className="button secondary" disabled={!process.env.SERPER_API_KEY} type="submit">
-              Test Serper
+              <SearchCheck size={16} /> Test Serper
             </button>
           </LoadingForm>
           <LoadingForm action="/api/settings/google-search-test" loadingLabel="Testing Google Search">
@@ -70,12 +71,12 @@ export default async function SettingsPage({
               disabled={!process.env.GOOGLE_SEARCH_API_KEY || !(process.env.GOOGLE_SEARCH_CX || process.env.GOOGLE_CSE_ID)}
               type="submit"
             >
-              Test Google Search
+              <SearchCheck size={16} /> Test Google Search
             </button>
           </LoadingForm>
           <LoadingForm action="/api/settings/serpapi-test" loadingLabel="Testing SerpAPI">
             <button className="button secondary" disabled={!(process.env.SERPAPI_API_KEY || process.env.SEARCH_API_KEY)} type="submit">
-              Test SerpAPI
+              <SearchCheck size={16} /> Test SerpAPI
             </button>
           </LoadingForm>
         </div>
@@ -88,7 +89,7 @@ export default async function SettingsPage({
         <p>Articles: {articles}</p>
         <p>Opportunities: {leads}</p>
         <LoadingForm action="/api/backup" loadingLabel="Running backup">
-          <button className="button" type="submit">Run Backup</button>
+          <button className="button" type="submit"><DatabaseBackup size={16} /> Run Backup</button>
         </LoadingForm>
       </section>
       <section className="panel" style={{ marginTop: 16 }}>
@@ -100,7 +101,7 @@ export default async function SettingsPage({
         </p>
         <LoadingForm className="actions" action="/api/reset-data" loadingLabel="Clearing collected data">
           <input name="confirmation" placeholder="Type RESET" aria-label="Reset confirmation" />
-          <button className="button secondary" type="submit">Clear Collected Data</button>
+          <button className="button secondary" type="submit"><Trash2 size={16} /> Clear Collected Data</button>
         </LoadingForm>
       </section>
     </Shell>

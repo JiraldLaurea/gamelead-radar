@@ -8,8 +8,62 @@ const requestSchema = z.object({
   body: z.string().trim().min(1).max(5000)
 });
 
+const maxAttachmentCount = 5;
+const maxAttachmentSize = 10 * 1024 * 1024;
+
+async function parseEmailRequest(request: Request) {
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.includes("multipart/form-data")) {
+    return {
+      parsed: requestSchema.safeParse(await request.json()),
+      attachments: []
+    };
+  }
+
+  const formData = await request.formData();
+  const leadIdsValue = formData.get("leadIds");
+  const payload = {
+    leadIds: typeof leadIdsValue === "string" ? JSON.parse(leadIdsValue) : [],
+    subject: formData.get("subject"),
+    body: formData.get("body")
+  };
+  const files = formData.getAll("attachments").filter((item): item is File => item instanceof File);
+  if (files.length > maxAttachmentCount) {
+    throw new Error(`Attach up to ${maxAttachmentCount} files only.`);
+  }
+
+  const attachments = await Promise.all(
+    files.map(async (file) => {
+      if (file.size > maxAttachmentSize) {
+        throw new Error(`Attachment "${file.name}" is larger than 10MB.`);
+      }
+
+      return {
+        filename: file.name,
+        content: Buffer.from(await file.arrayBuffer()),
+        contentType: file.type || undefined
+      };
+    })
+  );
+
+  return {
+    parsed: requestSchema.safeParse(payload),
+    attachments
+  };
+}
+
 export async function POST(request: Request) {
-  const body = requestSchema.safeParse(await request.json());
+  let emailRequest: Awaited<ReturnType<typeof parseEmailRequest>>;
+  try {
+    emailRequest = await parseEmailRequest(request);
+  } catch (error) {
+    return Response.json(
+      { success: false, error: error instanceof Error ? error.message : "Invalid attachment request" },
+      { status: 400 }
+    );
+  }
+
+  const body = emailRequest.parsed;
   if (!body.success) {
     return Response.json({ success: false, error: "Invalid email request", details: body.error.flatten() }, { status: 400 });
   }
@@ -39,7 +93,8 @@ export async function POST(request: Request) {
     try {
       const sent = await sendLeadEmail(lead, {
         subjectTemplate: body.data.subject,
-        bodyTemplate: body.data.body
+        bodyTemplate: body.data.body,
+        attachments: emailRequest.attachments
       });
       const draft = emailForOpportunityWithTemplate(lead, {
         subjectTemplate: body.data.subject,

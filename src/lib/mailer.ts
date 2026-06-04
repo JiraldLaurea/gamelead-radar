@@ -11,6 +11,11 @@ type OpportunityWithContext = Opportunity & {
 type EmailTemplateInput = {
   subjectTemplate?: string;
   bodyTemplate?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }>;
 };
 
 function requiredEnv(name: string) {
@@ -81,7 +86,8 @@ export async function sendLeadEmail(opportunity: OpportunityWithContext, input: 
     from: fromAddress,
     to: recipient,
     subject: draft.subject,
-    text: draft.body
+    text: draft.body,
+    attachments: input.attachments
   });
 
   return {

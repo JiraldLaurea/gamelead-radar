@@ -28,6 +28,9 @@
     "leads:reanalyze-openai": "tsx scripts/reanalyze-leads-openai.ts"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.0.1",
     "@prisma/client": "^6.19.3",
     "@types/nodemailer": "^8.0.0",
     "cheerio": "^1.0.0",
