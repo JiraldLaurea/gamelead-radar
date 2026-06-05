@@ -19,11 +19,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const secondaryEmails = parseJsonArray(lead.company.secondaryEmails);
   const secondaryPhones = parseJsonArray(lead.company.secondaryPhones);
   const visibleSecondaryPhones = secondaryPhones.slice(0, 5);
+  const emailMissingLabel =
+    lead.company.enrichmentStatus === "not_started" && !lead.company.lastEnrichedAt ? "Not checked" : "Not found";
   const enrichmentButtonLabel =
     lead.company.enrichmentStatus === "not_started" && !lead.company.lastEnrichedAt ? "Run enrichment" : "Re-run enrichment";
   const recommendedPackages = parseJsonArray(lead.recommendedPackages);
   const launchStage = displayValue(lead.game.launchStage?.replaceAll("_", " "));
-  const packageList = displayList(recommendedPackages);
   const evidence = evidenceForDisplay(parseJsonArray(lead.evidenceQuotes), {
     company: lead.company.name,
     game: lead.game.title,
@@ -36,7 +37,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   });
 
   return (
-    <Shell title={lead.game.title} subtitle={`${lead.company.name} · ${lead.company.country} · ${lead.status.replaceAll("_", " ")}`}>
+    <Shell title={`${lead.company.name} - ${lead.game.title}`} subtitle="Review lead details, contact information, and email outreach actions.">
       <div className="page-actions">
         <Link className="button secondary" href="/leads">
           <ArrowLeft size={16} /> Back to lead list
@@ -44,17 +45,46 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       </div>
       <div className="detail-layout">
         <section className="panel">
-          <h2>Opportunity</h2>
-          <p><span className={`badge grade-${lead.grade.toLowerCase()}`}>{lead.grade} {lead.score}</span></p>
-          <p>{lead.reasoning}</p>
-          <p><strong>Launch stage:</strong> {launchStage}</p>
-          <p><strong>Packages:</strong> {packageList}</p>
-          <p><strong>Next action:</strong> {displayValue(lead.nextAction)}</p>
-          <p><strong>Uncertainty:</strong> {displayValue(lead.uncertainty)}</p>
-          <h2>Evidence</h2>
-          <ul>
-            {evidence.map((quote) => <li key={quote}>{quote}</li>)}
-          </ul>
+          <div className="panel-title-row">
+            <h2>Opportunity</h2>
+            <span className={`grade-score-chip grade-${lead.grade.toLowerCase()}`}>
+              <span>Grade</span>
+              <strong className={`badge grade-${lead.grade.toLowerCase()}`}>{lead.grade} {lead.score}</strong>
+            </span>
+          </div>
+          <dl className="detail-list contact-detail-list opportunity-detail-list">
+            <dt>Country</dt>
+            <dd>{displayValue(lead.company.country)}</dd>
+            <dt>Platform</dt>
+            <dd>{displayValue(lead.game.platform)}</dd>
+            <dt>Source</dt>
+            <dd>{displayValue(lead.article.source.name)}</dd>
+            <dt>Lead status</dt>
+            <dd><span className={`badge status-${lead.status}`}>{lead.status.replaceAll("_", " ")}</span></dd>
+            <dt>Launch stage</dt>
+            <dd>{launchStage}</dd>
+            <dt>Packages</dt>
+            <dd className="opportunity-packages">
+              {recommendedPackages.length ? (
+                recommendedPackages.map((item) => <span className="package-chip" key={item}>{displayValue(item)}</span>)
+              ) : (
+                "N/A"
+              )}
+            </dd>
+            <dt>Next action</dt>
+            <dd className="opportunity-long-text">{displayValue(lead.nextAction)}</dd>
+            <dt>Uncertainty</dt>
+            <dd className="opportunity-long-text">{displayValue(lead.uncertainty)}</dd>
+          </dl>
+          <h2 className="opportunity-subheading">Evidence</h2>
+          <ol className="evidence-detail-list">
+            {evidence.map((quote, index) => (
+              <li key={quote}>
+                <span>Evidence {index + 1}</span>
+                <p>{quote}</p>
+              </li>
+            ))}
+          </ol>
           <div className="source-link-row">
             <a className="button source-article-button" href={lead.article.url} target="_blank">
               <ExternalLink size={16} /> Open source article
@@ -80,11 +110,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <span className="enrichment-confidence">{lead.company.enrichmentConfidence}% confidence</span>
           </p>
           {lead.company.enrichmentError ? <p><strong>Error:</strong> {lead.company.enrichmentError}</p> : null}
-          <dl className="detail-list">
+          <dl className="detail-list contact-detail-list">
             <dt>Website</dt>
-            <dd>{lead.company.website ? <a href={lead.company.website} target="_blank">{lead.company.website}</a> : "Not set"}</dd>
+            <dd>{lead.company.website ? <a href={lead.company.website} target="_blank">{lead.company.website}</a> : "Not found"}</dd>
             <dt>Email</dt>
-            <dd>{lead.company.contactEmail ?? "Not found"}</dd>
+            <dd>
+              {lead.company.contactEmail ? (
+                <a href={`mailto:${lead.company.contactEmail}`}>{lead.company.contactEmail}</a>
+              ) : (
+                <span className={`contact-value-pill ${emailMissingLabel === "Not checked" ? "neutral" : "warning"}`}>{emailMissingLabel}</span>
+              )}
+            </dd>
             <dt>Other emails</dt>
             <dd>{secondaryEmails.length ? secondaryEmails.join(", ") : "None"}</dd>
             <dt>Phone</dt>
@@ -131,9 +167,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </LoadingForm>
           <h2 style={{ marginTop: 18 }}>Enrichment Sources</h2>
           {enrichmentSources.length ? (
-            <ul>
-              {enrichmentSources.map((source) => <li key={source}><a href={source} target="_blank">{source}</a></li>)}
-            </ul>
+            <ol className="evidence-detail-list source-detail-list">
+              {enrichmentSources.map((source, index) => (
+                <li key={source}>
+                  <span>Source {index + 1}</span>
+                  <p><a href={source} target="_blank">{source}</a></p>
+                </li>
+              ))}
+            </ol>
           ) : (
             <p>No enrichment sources stored yet.</p>
           )}

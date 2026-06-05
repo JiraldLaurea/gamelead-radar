@@ -8,6 +8,7 @@ type LoadingFormProps = {
   action: string;
   children: ReactNode;
   className?: string;
+  id?: string;
   loadingLabel?: string;
   method?: "post";
   style?: CSSProperties;
@@ -18,7 +19,7 @@ type LoadingState = {
   error?: string;
 };
 
-export function LoadingForm({ action, children, className, loadingLabel = "Working", method = "post", style }: LoadingFormProps) {
+export function LoadingForm({ action, children, className, id, loadingLabel = "Working", method = "post", style }: LoadingFormProps) {
   const [loading, setLoading] = useState<LoadingState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -74,7 +75,7 @@ export function LoadingForm({ action, children, className, loadingLabel = "Worki
 
   return (
     <>
-      <form action={action} className={className} method={method} onSubmit={handleSubmit} style={style}>
+      <form action={action} className={className} id={id} method={method} onSubmit={handleSubmit} style={style}>
         {children}
       </form>
       {loading ? (
@@ -97,9 +98,11 @@ export function LoadingForm({ action, children, className, loadingLabel = "Worki
               <>
                 <div className="loading-spinner" aria-hidden="true" />
                 <p>Please wait while the system finishes this action.</p>
-                <button className="button secondary" type="button" onClick={cancel}>
-                  <X size={16} /> Cancel
-                </button>
+                <div className="loading-modal-actions">
+                  <button className="button secondary" type="button" onClick={cancel}>
+                    <X size={16} /> Cancel
+                  </button>
+                </div>
               </>
             )}
           </div>

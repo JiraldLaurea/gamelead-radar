@@ -17,7 +17,7 @@ export function DashboardActionForm({
   return (
     <LoadingForm action={action} loadingLabel={label}>
       <button className={isCrawl ? "button" : "button secondary"} type="submit">
-        <Icon size={16} /> {isCrawl ? "Run Crawl" : "Analyze Pending"}
+        <Icon size={16} /> {isCrawl ? "Run Crawl" : "Analyze Pending Articles"}
       </button>
     </LoadingForm>
   );

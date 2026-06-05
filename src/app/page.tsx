@@ -2,41 +2,47 @@ import { prisma } from "@/lib/prisma";
 import { Shell } from "@/components/shell";
 import { DashboardActionForm } from "@/components/dashboard-action-form";
 import { DashboardRecentLeadsTable } from "@/components/dashboard-recent-leads-table";
+import { DashboardStatsTabs } from "@/components/dashboard-stats-tabs";
+import { getOperationsSettings } from "@/lib/operations-settings";
 
 export default async function DashboardPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const [articlesToday, totalArticles, processedArticles, pendingArticles, newLeads, gradeA, needsResearch, drafts, excluded, lastRun, recentLeads, errors] =
+  const [emailsSentToday, articlesToday, gradeALeadsToday, totalEmailsSent, totalArticles, analyzedArticles, unprocessedArticles, totalLeads, totalGradeALeads, lastRun, recentLeads, operationsSettings] =
     await Promise.all([
+      prisma.outreachMessage.count({ where: { channel: "email", status: "sent", updatedAt: { gte: today } } }),
       prisma.article.count({ where: { createdAt: { gte: today } } }),
+      prisma.opportunity.count({ where: { grade: "A", createdAt: { gte: today } } }),
+      prisma.outreachMessage.count({ where: { channel: "email", status: "sent" } }),
       prisma.article.count(),
       prisma.article.count({ where: { processed: true } }),
       prisma.article.count({ where: { processed: false } }),
-      prisma.opportunity.count({ where: { status: "new" } }),
+      prisma.opportunity.count(),
       prisma.opportunity.count({ where: { grade: "A" } }),
-      prisma.opportunity.count({ where: { status: "needs_research" } }),
-      prisma.outreachMessage.count(),
-      prisma.article.count({ where: { excluded: true } }),
       prisma.crawlRun.findFirst({ orderBy: { startedAt: "desc" } }),
       prisma.opportunity.findMany({
         include: { company: true, game: true, article: { include: { source: true } } },
         orderBy: [{ grade: "asc" }, { score: "desc" }],
         take: 8
       }),
-      prisma.systemLog.findMany({ where: { level: "error" }, orderBy: { createdAt: "desc" }, take: 3 })
+      getOperationsSettings()
     ]);
+  const lastCrawlIssue = lastRun?.errorMessage?.split("\n").filter(Boolean)[0];
 
   return (
     <Shell title="Dashboard" subtitle="Pre-launch game sales opportunities for QROAD">
-      <div className="grid stats">
-        <Stat label="Articles today" value={articlesToday} />
-        <Stat label="Analyzed" value={`${processedArticles}/${totalArticles}`} hint={`${pendingArticles} pending`} />
-        <Stat label="New leads" value={newLeads} />
-        <Stat label="Grade A" value={gradeA} />
-        <Stat label="Needs research" value={needsResearch} />
-        <Stat label="Drafts" value={drafts} />
-        <Stat label="Excluded" value={excluded} />
-      </div>
+      <DashboardStatsTabs
+        daily={[
+          { label: "Emails sent today", value: emailsSentToday, hint: `Daily email sending limit: ${operationsSettings.autoEmailDailyLimit}` },
+          { label: "Grade A leads today", value: gradeALeadsToday, hint: `Total leads today: ${totalLeads}` },
+          { label: "Crawled articles today", value: articlesToday, hint: `${analyzedArticles} processed / ${unprocessedArticles} unprocessed` }
+        ]}
+        total={[
+          { label: "Total email sent", value: totalEmailsSent, hint: `Sent today: ${emailsSentToday}/${operationsSettings.autoEmailDailyLimit}` },
+          { label: "Total Grade A leads", value: totalGradeALeads, hint: `Total leads: ${totalLeads}` },
+          { label: "Total crawled articles", value: totalArticles, hint: `${analyzedArticles} processed / ${unprocessedArticles} unprocessed` }
+        ]}
+      />
       <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1fr)", marginTop: 16 }}>
         <section className="panel">
           <h2>Operations</h2>
@@ -44,18 +50,16 @@ export default async function DashboardPage() {
             <DashboardActionForm action="/api/crawl" kind="crawl" />
             <DashboardActionForm action="/api/analyze" kind="analyze" />
           </div>
-          <p>Last crawl: {lastRun ? `${lastRun.status} at ${lastRun.startedAt.toLocaleString()}` : "Never"}</p>
-          {errors.length ? (
+          {lastCrawlIssue ? (
             <div className="operation-error-card">
               <div className="operation-error-header">
-                <span className="badge status-failed">recent error</span>
-                <span>{errors[0].module} · {errors[0].createdAt.toLocaleString()}</span>
+                <span className="badge status-failed">last crawl issue</span>
+                <span>{lastRun?.finishedAt?.toLocaleString() ?? lastRun?.startedAt.toLocaleString()}</span>
               </div>
-              <p>{errors[0].message}</p>
-              {errors.length > 1 ? <span className="cell-subtle">{errors.length - 1} more recent error(s) logged.</span> : null}
+              <p>{lastCrawlIssue}</p>
             </div>
           ) : (
-            <p className="operation-empty-log">No recent errors logged.</p>
+            <p className="operation-empty-log">No issue reported by the latest crawl.</p>
           )}
         </section>
         <section className="panel">
@@ -100,14 +104,4 @@ function displayValue(value?: string | null) {
 function displayList(values: string[]) {
   const usefulValues = values.map(displayValue).filter((value) => value !== "N/A");
   return usefulValues.length ? usefulValues.join(", ") : "N/A";
-}
-
-function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
-  return (
-    <div className="stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {hint ? <small>{hint}</small> : null}
-    </div>
-  );
 }

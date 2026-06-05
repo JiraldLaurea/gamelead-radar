@@ -87,6 +87,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           {params.analysisFailed && params.analysisFailed !== "0" ? `, with ${params.analysisFailed} failure(s).` : "."}
         </p>
       ) : null}
+      {params.autoEmailSent && (params.autoEmailSent !== "0" || params.autoEmailFailed !== "0" || (params.autoEmail && params.autoEmail !== "disabled")) ? (
+        <p className={params.autoEmailFailed && params.autoEmailFailed !== "0" ? "notice warning" : "notice"}>
+          Automatic email pass sent {params.autoEmailSent} email(s)
+          {params.autoEmailFailed && params.autoEmailFailed !== "0" ? `, with ${params.autoEmailFailed} failure(s).` : "."}
+          {params.autoEmail ? ` Status: ${params.autoEmail.replaceAll("_", " ")}.` : ""}
+        </p>
+      ) : null}
       <section className="panel" style={{ marginTop: 16 }}>
         <LeadEnrichmentTable
           emailBodyTemplate={emailBodyTemplate}
@@ -105,7 +112,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             enrichmentStatus: lead.company.enrichmentStatus,
             enrichmentConfidence: lead.company.enrichmentConfidence,
             website: lead.company.website,
-            email: lead.company.contactEmail
+            email: lead.company.contactEmail,
+            emailChecked: lead.company.enrichmentStatus !== "not_started" || Boolean(lead.company.lastEnrichedAt)
           }))}
         />
       </section>

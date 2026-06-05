@@ -12,7 +12,7 @@ type ArticleReviewRow = {
 
 export function ArticleReviewTable({ articles }: { articles: ArticleReviewRow[] }) {
   return (
-    <div className="table-wrap">
+    <div className="table-wrap article-review-table-shell">
       <div className="table-scroll article-review-table-wrap">
         <table className="article-review-table">
         <thead>

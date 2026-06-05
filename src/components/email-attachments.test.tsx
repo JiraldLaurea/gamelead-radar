@@ -25,7 +25,8 @@ const sampleLead = {
   enrichmentStatus: "completed",
   enrichmentConfidence: 100,
   website: "https://samplestudio.example.com",
-  email: "jiraldcalusay@gmail.com"
+  email: "jiraldcalusay@gmail.com",
+  emailChecked: true
 };
 
 function selectFiles(container: HTMLElement) {

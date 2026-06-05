@@ -23,6 +23,7 @@ type LeadRow = {
   enrichmentConfidence: number;
   website?: string | null;
   email?: string | null;
+  emailChecked: boolean;
 };
 
 const checkboxSx = {
@@ -403,7 +404,15 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                   <strong>{lead.company}</strong>
                   {lead.website ? <span className="cell-subtle">{lead.website}</span> : null}
                 </td>
-                <td>{lead.email ? <span className="truncate-cell">{lead.email}</span> : <span className="cell-subtle">N/A</span>}</td>
+                <td>
+                  {lead.email ? (
+                    <span className="truncate-cell">{lead.email}</span>
+                  ) : (
+                    <span className={`contact-value-pill table-email-pill ${lead.emailChecked ? "warning" : "neutral"}`}>
+                      {lead.emailChecked ? "Not found" : "Not checked"}
+                    </span>
+                  )}
+                </td>
                 <td>{lead.country}</td>
                 <td>{lead.game}</td>
                 <td>{lead.platform}</td>

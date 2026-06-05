@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, FileSearch, Newspaper, Radar, Settings } from "lucide-react";
+import { BarChart3, FileSearch, MailCheck, Newspaper, Radar, Settings } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 const navGroups = [
@@ -13,6 +13,7 @@ const navGroups = [
     label: "General",
     items: [
       ["Leads", "/leads", Radar],
+      ["Email Log", "/email-log", MailCheck],
       ["Articles", "/articles", FileSearch],
       ["Sources", "/sources", Newspaper],
       ["Settings", "/settings", Settings]

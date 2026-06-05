@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, RotateCcw, Save } from "lucide-react";
+import { Eye, Plus, RotateCcw, Save, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { defaultEmailBodyTemplate } from "@/lib/email-template-defaults";
 import { HelpModal } from "./help-modal";
@@ -12,6 +12,7 @@ type EmailTemplateSettingsFormProps = {
 export function EmailTemplateSettingsForm({ initialBody }: EmailTemplateSettingsFormProps) {
   const [body, setBody] = useState(normalizeTemplatePlaceholders(initialBody));
   const [loading, setLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -74,8 +75,28 @@ export function EmailTemplateSettingsForm({ initialBody }: EmailTemplateSettings
           <h2>Email Template</h2>
           <p className="inline-muted">This body is used as the default message when composing lead emails.</p>
         </div>
-        <HelpModal title="Email Template Placeholders" items={emailTemplatePlaceholderHelp} buttonLabel="Template Help" />
+        <div className="template-header-actions">
+          <button className="button secondary help-button" type="button" onClick={() => setShowPreview(true)}>
+            <Eye size={16} /> Show Preview
+          </button>
+          <HelpModal title="Email Template Placeholders" items={emailTemplatePlaceholderHelp} buttonLabel="Template Help" />
+        </div>
       </div>
+      {showPreview ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowPreview(false)}>
+          <div className="modal template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h2 id="template-preview-title">Email Preview</h2>
+              <button className="icon-button" type="button" onClick={() => setShowPreview(false)} aria-label="Close preview">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="template-preview modal-template-preview" aria-label="Highlighted email template preview">
+              {renderTemplatePreview(body)}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <label>
         Body
         <textarea ref={bodyTextareaRef} className="settings-template-textarea" value={body} onChange={(event) => setBody(event.target.value)} rows={14} />
@@ -93,12 +114,6 @@ export function EmailTemplateSettingsForm({ initialBody }: EmailTemplateSettings
           </button>
         ))}
       </div>
-      <label>
-        Preview
-        <div className="template-preview" aria-label="Highlighted email template preview">
-          {renderTemplatePreview(body)}
-        </div>
-      </label>
       {notice ? <p className={notice.kind === "success" ? "notice" : "notice warning"}>{notice.text}</p> : null}
       <div className="settings-template-actions">
         <button className="button secondary" type="button" onClick={() => setBody(normalizeTemplatePlaceholders(defaultEmailBodyTemplate))} disabled={loading}>
