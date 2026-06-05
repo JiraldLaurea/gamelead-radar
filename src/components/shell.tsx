@@ -1,5 +1,6 @@
 import { SidebarNav } from "./sidebar-nav";
 import Link from "next/link";
+import { AutomationStatusBar } from "./automation-status-bar";
 
 export function Shell({
   title,
@@ -17,6 +18,7 @@ export function Shell({
         <SidebarNav />
       </aside>
       <main className="main">
+        <AutomationStatusBar />
         <div className="topbar">
           <div>
             <h1>{title}</h1>

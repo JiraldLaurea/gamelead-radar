@@ -8,14 +8,14 @@ const parser = new Parser({
   headers: crawlerHeaders()
 });
 
-export async function crawlActiveSources() {
+export async function crawlActiveSources(options: { maxArticles?: number } = {}) {
   const run = await prisma.crawlRun.create({ data: { status: "running" } });
   let articlesFound = 0;
   let articlesSaved = 0;
   const errors: string[] = [];
 
   const sources = await prisma.source.findMany({ where: { active: true }, orderBy: [{ priority: "asc" }, { name: "asc" }] });
-  await crawlSources(sources, { runId: run.id, articlesFound, articlesSaved, errors });
+  await crawlSources(sources, { runId: run.id, articlesFound, articlesSaved, errors, articleLimit: options.maxArticles });
 
   const finalRun = await prisma.crawlRun.findUniqueOrThrow({ where: { id: run.id } });
   return { articlesFound: finalRun.articlesFound, articlesSaved: finalRun.articlesSaved, errors };
@@ -32,13 +32,17 @@ export async function crawlSingleSource(sourceId: string) {
 
 async function crawlSources(
   sources: Awaited<ReturnType<typeof prisma.source.findMany>>,
-  state: { runId: string; articlesFound: number; articlesSaved: number; errors: string[] }
+  state: { runId: string; articlesFound: number; articlesSaved: number; errors: string[]; articleLimit?: number }
 ) {
   for (const source of sources) {
+    if (state.articleLimit && state.articlesFound >= state.articleLimit) break;
     try {
       const collected = await collectSourceItems(source);
-      state.articlesFound += collected.length;
-      for (const article of collected.slice(0, source.maxItemsPerRun ?? Number(process.env.MAX_ITEMS_PER_SOURCE ?? 30))) {
+      const sourceLimit = source.maxItemsPerRun ?? Number(process.env.MAX_ITEMS_PER_SOURCE ?? 30);
+      const remainingLimit = state.articleLimit ? Math.max(state.articleLimit - state.articlesFound, 0) : sourceLimit;
+      const selectedArticles = collected.slice(0, Math.min(sourceLimit, remainingLimit));
+      state.articlesFound += selectedArticles.length;
+      for (const article of selectedArticles) {
         const hash = contentHash(`${article.title}|${article.url}|${article.rawContent}`);
         const saved = await prisma.article.upsert({
           where: { url: article.url },

@@ -1,36 +1,23 @@
-import { prioritizeArticles, processArticle } from "@/lib/article-analysis-service";
+import { runAutomaticEmailPass } from "@/lib/auto-email";
 import { redirectTo } from "@/lib/http";
-import { prisma } from "@/lib/prisma";
+import { analyzePendingArticles } from "@/lib/lead-analysis-runner";
+import { getOperationsSettings } from "@/lib/operations-settings";
 
 export async function GET() {
   return redirectTo("/");
 }
 
 export async function POST() {
-  const limit = process.env.OPENAI_API_KEY ? Number(process.env.OPENAI_ANALYZE_BATCH_SIZE ?? 10) : 50;
-  const articles = prioritizeArticles(
-    await prisma.article.findMany({ where: { processed: false }, include: { source: true }, take: 100 })
-  ).slice(0, limit);
+  const settings = await getOperationsSettings();
+  const analysis = await analyzePendingArticles(settings.maxLeadAnalysisLimit);
 
-  let analyzed = 0;
-  let failed = 0;
-  for (const article of articles) {
-    try {
-      await processArticle(article);
-      analyzed += 1;
-    } catch (error) {
-      failed += 1;
-      const message = error instanceof Error ? error.message : "Unknown analysis error";
-      await prisma.systemLog.create({
-        data: {
-          level: "error",
-          module: "analysis",
-          message: `Analyze pending failed for article: ${message}`,
-          metadata: JSON.stringify({ articleId: article.id, url: article.url })
-        }
-      });
-    }
+  const autoEmail = await runAutomaticEmailPass();
+  const params = new URLSearchParams({ analyzed: String(analysis.analyzed), analysisFailed: String(analysis.failed) });
+  if (!autoEmail.skipped || autoEmail.reason) {
+    params.set("autoEmailSent", String(autoEmail.sent));
+    params.set("autoEmailFailed", String(autoEmail.failed));
+    if (autoEmail.reason) params.set("autoEmail", autoEmail.reason);
   }
 
-  return redirectTo(`/leads?analyzed=${analyzed}&analysisFailed=${failed}`);
+  return redirectTo(`/leads?${params.toString()}`);
 }
