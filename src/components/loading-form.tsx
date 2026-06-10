@@ -2,7 +2,7 @@
 
 import type { CSSProperties, FormEvent, ReactNode } from "react";
 import { useRef, useState } from "react";
-import { X } from "lucide-react";
+import { showSnackbar, storePendingSnackbar, type SnackbarType } from "@/lib/snackbar-events";
 
 type LoadingFormProps = {
   action: string;
@@ -51,10 +51,13 @@ export function LoadingForm({ action, children, className, id, loadingLabel = "W
       }
 
       if (response.redirected) {
+        const snackbar = snackbarForRedirect(response.url, label);
+        storePendingSnackbar(snackbar.message, snackbar.type);
         window.location.assign(response.url);
         return;
       }
 
+      storePendingSnackbar(finishedMessage(label));
       window.location.reload();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -62,6 +65,7 @@ export function LoadingForm({ action, children, className, id, loadingLabel = "W
         return;
       }
       const message = error instanceof Error ? error.message : "The request failed. Please try again.";
+      showSnackbar(message, "error");
       setLoading({ label, error: message });
     } finally {
       abortRef.current = null;
@@ -81,26 +85,28 @@ export function LoadingForm({ action, children, className, id, loadingLabel = "W
       {loading ? (
         <div className="loading-backdrop" role="presentation">
           <div className="loading-modal" role="alertdialog" aria-modal="true" aria-label={loading.error ? "Action failed" : loading.label}>
-            <div className="loading-modal-header">
-              <h2>{loading.error ? "Something went wrong" : loading.label}</h2>
-              <button className="icon-button" type="button" onClick={cancel} aria-label="Cancel request">
-                <X size={18} />
-              </button>
-            </div>
             {loading.error ? (
               <>
-                <p className="loading-error">{loading.error}</p>
-                <button className="button" type="button" onClick={() => setLoading(null)}>
-                  Close
-                </button>
+                <div className="loading-modal-body">
+                  <h2>Something went wrong</h2>
+                  <p className="loading-error">{loading.error}</p>
+                </div>
+                <div className="modal-footer loading-modal-actions">
+                  <button className="button" type="button" onClick={() => setLoading(null)}>
+                    Close
+                  </button>
+                </div>
               </>
             ) : (
               <>
-                <div className="loading-spinner" aria-hidden="true" />
-                <p>Please wait while the system finishes this action.</p>
-                <div className="loading-modal-actions">
+                <div className="loading-modal-body">
+                  <LoadingSpinner />
+                  <h2>{loading.label}</h2>
+                  <p>Please wait while the system finishes this action.</p>
+                </div>
+                <div className="modal-footer loading-modal-actions">
                   <button className="button secondary" type="button" onClick={cancel}>
-                    <X size={16} /> Cancel
+                    Cancel
                   </button>
                 </div>
               </>
@@ -110,4 +116,46 @@ export function LoadingForm({ action, children, className, id, loadingLabel = "W
       ) : null}
     </>
   );
+}
+
+export function LoadingSpinner() {
+  return <span className="loading-spinner" aria-hidden="true" />;
+}
+
+function finishedMessage(label: string) {
+  return `${label.replace(/\.+$/, "")} finished.`;
+}
+
+function snackbarForRedirect(url: string, label: string): { message: string; type: SnackbarType } {
+  const fallback = { message: finishedMessage(label), type: "success" as const };
+
+  try {
+    const params = new URL(url).searchParams;
+    const providerResult = params.get("serper") ?? params.get("serpapi") ?? params.get("googleSearch");
+    if (providerResult) {
+      const provider = params.has("googleSearch") ? "Google Search" : params.has("serpapi") ? "SerpAPI" : "Serper";
+      if (providerResult === "success") return { message: `${provider} connection test succeeded.`, type: "success" };
+      if (providerResult === "empty") return { message: `${provider} responded, but returned no results.`, type: "error" };
+      if (providerResult === "missing") return { message: `${provider} API key is missing.`, type: "error" };
+      if (providerResult === "failed") return { message: `${provider} test failed.`, type: "error" };
+    }
+
+    if (params.get("operations") === "saved") return { message: "Operations settings saved successfully.", type: "success" };
+    if (params.get("debug") === "saved") return { message: "Debug settings saved successfully.", type: "success" };
+    if (params.get("testEmail") === "started") return { message: "Test automatic email sending started.", type: "success" };
+    if (params.get("testData") === "success") return { message: "Grade A test lead added.", type: "success" };
+    if (params.get("testData") === "exists") return { message: "The Grade A sample lead already exists.", type: "error" };
+    if (params.get("reset") === "success") return { message: "Collected data was reset successfully.", type: "success" };
+    if (params.get("reset") === "invalid") return { message: "Type RESET exactly before clearing collected data.", type: "error" };
+    if (params.has("enriched")) return { message: `Enrichment finished for ${params.get("enriched")} lead(s).`, type: "success" };
+    if (params.has("analyzed")) {
+      const failed = params.get("analysisFailed");
+      if (failed && failed !== "0") return { message: `Analyzed ${params.get("analyzed")} article(s), with ${failed} failure(s).`, type: "error" };
+      return { message: `Analyzed ${params.get("analyzed")} article(s).`, type: "success" };
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
 }

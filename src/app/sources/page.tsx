@@ -93,7 +93,7 @@ export default async function SourcesPage() {
         </div>
         <div className="table-wrap">
           <div className="table-scroll">
-            <table>
+            <table className="sources-table">
             <thead>
               <tr>
                 <th>Source</th>

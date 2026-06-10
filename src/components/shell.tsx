@@ -1,6 +1,7 @@
 import { SidebarNav } from "./sidebar-nav";
 import Link from "next/link";
 import { AutomationStatusBar } from "./automation-status-bar";
+import { getAutomationStatus } from "@/lib/automation-runner";
 
 export function Shell({
   title,
@@ -18,7 +19,7 @@ export function Shell({
         <SidebarNav />
       </aside>
       <main className="main">
-        <AutomationStatusBar />
+        <AutomationStatusBarLoader />
         <div className="topbar">
           <div>
             <h1>{title}</h1>
@@ -29,4 +30,9 @@ export function Shell({
       </main>
     </div>
   );
+}
+
+async function AutomationStatusBarLoader() {
+  const status = await getAutomationStatus();
+  return <AutomationStatusBar initialStatus={status} />;
 }

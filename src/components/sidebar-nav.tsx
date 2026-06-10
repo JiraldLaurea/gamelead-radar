@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 const navGroups = [
   {
     label: "Dashboards",
-    items: [["Dashboard", "/", BarChart3]]
+    items: [["Overview", "/", BarChart3]]
   },
   {
     label: "General",

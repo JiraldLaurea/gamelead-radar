@@ -3,6 +3,7 @@
 import { Pencil, Plus, RotateCcw, Send, X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { emailSubjectTemplate } from "@/lib/email-template-defaults";
+import { showSnackbar } from "@/lib/snackbar-events";
 
 type LeadDetailComposeEmailProps = {
   leadId: string;
@@ -51,13 +52,17 @@ export function LeadDetailComposeEmail({ leadId, companyName, email, emailBodyTe
       }
 
       setNotice({ kind: "success", text: "Sent 1 email." });
+      showSnackbar("Sent 1 email.");
       setShowModal(false);
       setAttachments([]);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setNotice({ kind: "error", text: "Email sending was canceled." });
+        showSnackbar("Email sending was canceled.", "error");
       } else {
-        setNotice({ kind: "error", text: error instanceof Error ? error.message : "Unable to send email." });
+        const message = error instanceof Error ? error.message : "Unable to send email.";
+        setNotice({ kind: "error", text: message });
+        showSnackbar(message, "error");
       }
     } finally {
       abortRef.current = null;
@@ -117,7 +122,7 @@ export function LeadDetailComposeEmail({ leadId, companyName, email, emailBodyTe
             <div className="loading-spinner" aria-hidden="true" />
             <p>Please wait while the outreach email is sent.</p>
             <button className="button secondary" type="button" onClick={cancelSend}>
-              <X size={16} /> Cancel
+               Cancel
             </button>
           </div>
         </div>
@@ -175,7 +180,7 @@ export function LeadDetailComposeEmail({ leadId, companyName, email, emailBodyTe
                   />
                   <label className="file-upload-control" htmlFor={attachmentInputId}>
                     <span className="button secondary compact-button">
-                      <Plus size={16} /> Choose files
+                      Choose files
                     </span>
                   </label>
                   <span className="field-note">Up to 5 files, 10MB max each file.</span>
@@ -194,13 +199,15 @@ export function LeadDetailComposeEmail({ leadId, companyName, email, emailBodyTe
                 ) : null}
               </div>
             </div>
-            <div className="compose-modal-actions">
-              <button className="button secondary" type="button" onClick={resetTemplate} disabled={sending}>
-                <RotateCcw size={16} /> Reset
-              </button>
+            <div className="modal-footer compose-modal-actions">
               <div className="compose-modal-action-group">
                 <button className="button secondary" type="button" onClick={() => setShowModal(false)} disabled={sending}>
-                  <X size={16} /> Cancel
+                   Cancel
+                </button>
+              </div>
+              <div className="compose-modal-action-group">
+                <button className="button secondary" type="button" onClick={resetTemplate} disabled={sending}>
+                  <RotateCcw size={16} /> Reset
                 </button>
                 <button className="button" type="button" onClick={sendEmail} disabled={sending || !subject.trim() || !body.trim()}>
                   <Send size={16} /> Send Email
