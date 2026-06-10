@@ -1,10 +1,11 @@
 "use client";
 
 import Checkbox from "@mui/material/Checkbox";
-import { ChevronDown, Download, Pencil, Plus, RotateCcw, SearchCheck, Send, X } from "lucide-react";
+import { ChevronDown, Download, Pencil, Plus, RotateCcw, SearchCheck, Send, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { emailSubjectTemplate } from "@/lib/email-template-defaults";
+import { showSnackbar } from "@/lib/snackbar-events";
 import { LoadingForm } from "./loading-form";
 
 type LeadRow = {
@@ -44,6 +45,9 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
   const [emailNotice, setEmailNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [emailSubject, setEmailSubject] = useState(emailSubjectTemplate);
   const [emailBody, setEmailBody] = useState(emailBodyTemplate);
@@ -109,17 +113,22 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
         const detail = payload.results?.find((result) => result.error)?.error;
         throw new Error(detail || payload.error || "Unable to send selected emails.");
       }
+      const message = `Sent ${payload.sent ?? 0} email${payload.sent === 1 ? "" : "s"}${payload.failed ? `, with ${payload.failed} failure(s)` : ""}.`;
       setEmailNotice({
         kind: "success",
-        text: `Sent ${payload.sent ?? 0} email${payload.sent === 1 ? "" : "s"}${payload.failed ? `, with ${payload.failed} failure(s)` : ""}.`
+        text: message
       });
+      showSnackbar(message);
       setShowEmailModal(false);
       setAttachments([]);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setEmailNotice({ kind: "error", text: "Email sending was canceled." });
+        showSnackbar("Email sending was canceled.", "error");
       } else {
-        setEmailNotice({ kind: "error", text: error instanceof Error ? error.message : "Unable to send selected emails." });
+        const message = error instanceof Error ? error.message : "Unable to send selected emails.";
+        setEmailNotice({ kind: "error", text: message });
+        showSnackbar(message, "error");
       }
     } finally {
       emailAbortRef.current = null;
@@ -165,6 +174,34 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
     setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  async function deleteSelectedLeads() {
+    if (selected.length === 0 || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const response = await fetch("/api/leads/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selected })
+      });
+      const payload = (await response.json()) as { success?: boolean; deleted?: number; error?: string };
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Unable to delete selected leads.");
+      }
+      const deleted = payload.deleted ?? selected.length;
+      showSnackbar(`Deleted ${deleted} lead${deleted === 1 ? "" : "s"}.`);
+      setSelected([]);
+      setShowDeleteModal(false);
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to delete selected leads.";
+      setDeleteError(message);
+      showSnackbar(message, "error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       {sendingEmail ? (
@@ -179,7 +216,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
             <div className="loading-spinner" aria-hidden="true" />
             <p>Please wait while selected outreach emails are sent.</p>
             <button className="button secondary" type="button" onClick={cancelEmailSend}>
-              <X size={16} /> Cancel
+               Cancel
             </button>
           </div>
         </div>
@@ -244,7 +281,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                   />
                   <label className="file-upload-control" htmlFor={attachmentInputId}>
                     <span className="button secondary compact-button">
-                      <Plus size={16} /> Choose files
+                      Choose files
                     </span>
                   </label>
                   <span className="field-note">Up to 5 files, 10MB max each file.</span>
@@ -263,13 +300,15 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                 ) : null}
               </div>
             </div>
-            <div className="compose-modal-actions">
-              <button className="button secondary" type="button" onClick={resetEmailTemplate} disabled={sendingEmail}>
-                <RotateCcw size={16} /> Reset
-              </button>
+            <div className="modal-footer compose-modal-actions">
               <div className="compose-modal-action-group">
                 <button className="button secondary" type="button" onClick={() => setShowEmailModal(false)} disabled={sendingEmail}>
-                  <X size={16} /> Cancel
+                   Cancel
+                </button>
+              </div>
+              <div className="compose-modal-action-group">
+                <button className="button secondary" type="button" onClick={resetEmailTemplate} disabled={sendingEmail}>
+                  <RotateCcw size={16} /> Reset
                 </button>
                 <button className="button" type="button" onClick={sendSelectedEmails} disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}>
                   <Send size={16} /> {sendingEmail ? "Sending..." : "Send Email"}
@@ -286,12 +325,14 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
       ))}
       <div className="lead-bulk-actions">
         <div className="lead-bulk-action-group">
-          <span>{selected.length} selected</span>
           <button className="button" type="submit" disabled={selected.length === 0} data-loading-label="Enriching selected leads">
             <SearchCheck size={16} /> Enrich Selected
           </button>
           <button className="button secondary" type="button" onClick={() => setShowEmailModal(true)} disabled={selectedWithEmail.length === 0 || sendingEmail}>
             <Pencil size={16} /> Compose Email
+          </button>
+          <button className="button secondary" type="button" onClick={() => setShowDeleteModal(true)} disabled={selected.length === 0}>
+            <Trash2 size={16} /> Delete
           </button>
         </div>
         <div className="export-menu" ref={exportMenuRef}>
@@ -301,7 +342,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
             aria-expanded={showExportMenu}
             onClick={() => setShowExportMenu((current) => !current)}
           >
-            <Download size={16} /> Export <ChevronDown size={16} />
+            Export <ChevronDown size={16} />
           </button>
           {showExportMenu ? (
             <div className="export-menu-list">
@@ -360,6 +401,11 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
               <th className="lead-enrichment-column">Enrichment</th>
               <th className="lead-source-column">Source</th>
               <th className="lead-status-column">Status</th>
+            </tr>
+            <tr className="table-subheader-row">
+              <th className="table-subheader-cell" colSpan={12}>
+                {leads.length} lead{leads.length === 1 ? "" : "s"} &bull; {selected.length} selected
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -431,6 +477,35 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
         </div>
       </div>
       </LoadingForm>
+      {showDeleteModal ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => (deleting ? undefined : setShowDeleteModal(false))}>
+          <div className="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="lead-delete-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2 id="lead-delete-title">Delete leads</h2>
+                <p className="inline-muted">
+                  {selectedLeads.length} selected lead{selectedLeads.length === 1 ? "" : "s"} will be removed permanently.
+                </p>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowDeleteModal(false)} aria-label="Close delete confirmation" disabled={deleting}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>This deletes the lead opportunity and its outreach records. Source articles remain available in Article Review.</p>
+              {deleteError ? <p className="notice warning">{deleteError}</p> : null}
+            </div>
+            <div className="modal-footer">
+              <button className="button secondary" type="button" onClick={() => setShowDeleteModal(false)} disabled={deleting}>
+                Cancel
+              </button>
+              <button className="button danger" type="button" onClick={deleteSelectedLeads} disabled={deleting}>
+                <Trash2 size={16} /> {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

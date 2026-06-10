@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, FilePenLine, RotateCcw, Save, SearchCheck, Tag } from "lucide-react";
+import { ExternalLink, FilePenLine, RotateCcw, Save, SearchCheck, Tag } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { LeadDetailComposeEmail } from "@/components/lead-detail-compose-email";
 import { LoadingForm } from "@/components/loading-form";
 import { Shell } from "@/components/shell";
@@ -39,9 +39,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   return (
     <Shell title={`${lead.company.name} - ${lead.game.title}`} subtitle="Review lead details, contact information, and email outreach actions.">
       <div className="page-actions">
-        <Link className="button secondary" href="/leads">
-          <ArrowLeft size={16} /> Back to lead list
-        </Link>
+        <BackButton />
       </div>
       <div className="detail-layout">
         <section className="panel">

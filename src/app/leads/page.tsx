@@ -94,7 +94,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           {params.autoEmail ? ` Status: ${params.autoEmail.replaceAll("_", " ")}.` : ""}
         </p>
       ) : null}
-      <section className="panel" style={{ marginTop: 16 }}>
+      <div className="lead-list-section">
         <LeadEnrichmentTable
           emailBodyTemplate={emailBodyTemplate}
           leads={leads.map((lead) => ({
@@ -116,7 +116,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             emailChecked: lead.company.enrichmentStatus !== "not_started" || Boolean(lead.company.lastEnrichedAt)
           }))}
         />
-      </section>
+      </div>
     </Shell>
   );
 }

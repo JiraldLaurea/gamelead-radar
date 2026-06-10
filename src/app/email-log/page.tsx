@@ -96,6 +96,7 @@ export default async function EmailLogPage({ searchParams }: { searchParams: Pro
         <EmailLogTable
           messages={messages.map((message) => ({
             id: message.id,
+            leadId: message.opportunity.id,
             sentAt: message.updatedAt.toLocaleString(),
             company: message.opportunity.company.name,
             recipientEmail: message.opportunity.company.contactEmail,
