@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import type { Company, Game, Opportunity, OutreachMessage } from "@prisma/client";
+import { getDebugSettings } from "@/lib/operations-settings";
 import { buildEmailDraft } from "./outreach";
 
 type OpportunityWithContext = Opportunity & {
@@ -42,6 +43,11 @@ export function smtpConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+export async function canRecordEmailWithoutSmtp() {
+  const settings = await getDebugSettings();
+  return settings.disableActualEmailSending;
+}
+
 export function emailForOpportunity(opportunity: OpportunityWithContext) {
   const existingDraft = opportunity.outreachMessages.find((message) => message.channel === "email");
   if (existingDraft) {
@@ -56,9 +62,14 @@ export function emailForOpportunity(opportunity: OpportunityWithContext) {
 }
 
 export function applyOpportunityTemplate(template: string, opportunity: OpportunityWithContext) {
+  const companyName = emailSafeCompanyName(opportunity.company.name);
   return template
-    .replace(/\[business_name\]/gi, opportunity.company.name)
-    .replace(/\[company_name\]/gi, opportunity.company.name)
+    .replace(/Dear\s+\[business_name\],/gi, companyName === "there" ? "Hi," : `Dear ${companyName},`)
+    .replace(/Dear\s+\[company_name\],/gi, companyName === "there" ? "Hi," : `Dear ${companyName},`)
+    .replace(/\[business_name\]\s+Team/gi, companyName === "there" ? "there" : `${companyName} Team`)
+    .replace(/\[company_name\]\s+Team/gi, companyName === "there" ? "there" : `${companyName} Team`)
+    .replace(/\[business_name\]/gi, companyName)
+    .replace(/\[company_name\]/gi, companyName)
     .replace(/\[game_title\]/gi, opportunity.game.title)
     .replace(/\[opportunity_type\]/gi, opportunity.opportunityType.replaceAll("_", " "));
 }
@@ -72,23 +83,35 @@ export function emailForOpportunityWithTemplate(opportunity: OpportunityWithCont
   };
 }
 
+function emailSafeCompanyName(name: string) {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized || normalized === "needs research" || normalized === "not identified" || normalized === "unknown") {
+    return "there";
+  }
+  return name;
+}
+
 export async function sendLeadEmail(opportunity: OpportunityWithContext, input: EmailTemplateInput = {}) {
   const recipient = opportunity.company.contactEmail;
   if (!recipient) throw new Error(`${opportunity.company.name} does not have a contact email`);
 
-  const transporter = getTransporter();
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-  const fromName = process.env.SMTP_FROM_NAME;
-  const fromAddress = fromName && from ? `"${fromName}" <${from}>` : from;
   const draft = emailForOpportunityWithTemplate(opportunity, input);
+  const debugSettings = await getDebugSettings();
 
-  await transporter.sendMail({
-    from: fromAddress,
-    to: recipient,
-    subject: draft.subject,
-    text: draft.body,
-    attachments: input.attachments
-  });
+  if (!debugSettings.disableActualEmailSending) {
+    const transporter = getTransporter();
+    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+    const fromName = process.env.SMTP_FROM_NAME;
+    const fromAddress = fromName && from ? `"${fromName}" <${from}>` : from;
+
+    await transporter.sendMail({
+      from: fromAddress,
+      to: recipient,
+      subject: draft.subject,
+      text: draft.body,
+      attachments: input.attachments
+    });
+  }
 
   return {
     recipient,

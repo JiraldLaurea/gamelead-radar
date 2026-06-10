@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { emailForOpportunityWithTemplate, sendLeadEmail, smtpConfigured } from "@/lib/mailer";
+import { getEmailTemplateAttachmentForSend } from "@/lib/email-template";
+import { canRecordEmailWithoutSmtp, emailForOpportunityWithTemplate, sendLeadEmail, smtpConfigured } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
 
 const requestSchema = z.object({
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
     return Response.json({ success: false, error: "Invalid email request", details: body.error.flatten() }, { status: 400 });
   }
 
-  if (!smtpConfigured()) {
+  if (!(await canRecordEmailWithoutSmtp()) && !smtpConfigured()) {
     return Response.json(
       { success: false, error: "SMTP is not configured. Add SMTP_HOST, SMTP_USER, SMTP_PASS, and optional SMTP_PORT/SMTP_FROM." },
       { status: 400 }
@@ -76,6 +77,8 @@ export async function POST(request: Request) {
   }
 
   const leadIds = [...new Set(body.data.leadIds)];
+  const defaultAttachments = await getEmailTemplateAttachmentForSend();
+  const attachments = [...defaultAttachments, ...emailRequest.attachments];
   const leads = await prisma.opportunity.findMany({
     where: {
       id: { in: leadIds },
@@ -94,7 +97,7 @@ export async function POST(request: Request) {
       const sent = await sendLeadEmail(lead, {
         subjectTemplate: body.data.subject,
         bodyTemplate: body.data.body,
-        attachments: emailRequest.attachments
+        attachments
       });
       const draft = emailForOpportunityWithTemplate(lead, {
         subjectTemplate: body.data.subject,

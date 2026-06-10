@@ -5,12 +5,15 @@ type OpportunityContext = Opportunity & { company: Company; game: Game };
 export function buildEmailDraft(opportunity: OpportunityContext) {
   const packages = JSON.parse(opportunity.recommendedPackages) as string[];
   const topPackages = packages.slice(0, 3);
+  const hasCompanyName = hasIdentifiedCompanyName(opportunity.company.name);
+  const greeting = hasCompanyName ? `Hi ${opportunity.company.name} Team,` : "Hi there,";
+  const companyReference = hasCompanyName ? opportunity.company.name : "your team";
 
   return {
     subject: `Support for ${opportunity.game.title}'s upcoming ${opportunity.opportunityType}`,
-    body: `Hi ${opportunity.company.name} Team,
+    body: `${greeting}
 
-I saw the recent news about ${opportunity.company.name} preparing ${opportunity.game.title} for ${opportunity.opportunityType.replaceAll("_", " ")}.
+I saw the recent news about ${companyReference} preparing ${opportunity.game.title} for ${opportunity.opportunityType.replaceAll("_", " ")}.
 
 Based on this stage, teams often need support with ${topPackages.join(", ")}.
 
@@ -25,10 +28,14 @@ QROAD Team`
 }
 
 export function buildLinkedInDraft(opportunity: OpportunityContext) {
-  return {
-    body: `Hi ${opportunity.company.name} Team,
+  const hasCompanyName = hasIdentifiedCompanyName(opportunity.company.name);
+  const greeting = hasCompanyName ? `Hi ${opportunity.company.name} Team,` : "Hi there,";
+  const companyReference = hasCompanyName ? `${opportunity.company.name}'s` : "your team's";
 
-I saw the news about ${opportunity.company.name}'s upcoming ${opportunity.game.title} ${opportunity.opportunityType.replaceAll("_", " ")}.
+  return {
+    body: `${greeting}
+
+I saw the news about ${companyReference} upcoming ${opportunity.game.title} ${opportunity.opportunityType.replaceAll("_", " ")}.
 
 QROAD supports game companies with QA, localization QA, launch operations, community management, and marketing/creative support.
 
@@ -37,4 +44,9 @@ If your team is preparing for launch, I would be glad to share how we can suppor
 Best regards,
 QROAD Team`
   };
+}
+
+function hasIdentifiedCompanyName(name: string) {
+  const normalized = name.trim().toLowerCase();
+  return Boolean(normalized && normalized !== "needs research" && normalized !== "not identified" && normalized !== "unknown");
 }

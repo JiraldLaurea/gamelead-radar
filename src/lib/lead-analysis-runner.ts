@@ -1,7 +1,7 @@
 import { prioritizeArticles, processArticle } from "@/lib/article-analysis-service";
 import { prisma } from "@/lib/prisma";
 
-export async function analyzePendingArticles(limit: number) {
+export async function analyzePendingArticles(limit: number, options: { skipFailedArticles?: boolean } = {}) {
   const articles = prioritizeArticles(
     await prisma.article.findMany({ where: { processed: false }, include: { source: true }, take: Math.max(limit, 100) })
   ).slice(0, limit);
@@ -23,6 +23,9 @@ export async function analyzePendingArticles(limit: number) {
           metadata: JSON.stringify({ articleId: article.id, url: article.url })
         }
       });
+      if (options.skipFailedArticles) {
+        await prisma.article.update({ where: { id: article.id }, data: { processed: true, excluded: true } });
+      }
     }
   }
 

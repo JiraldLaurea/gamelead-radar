@@ -1,7 +1,7 @@
 import { emailSubjectTemplate } from "@/lib/email-template-defaults";
-import { getEmailBodyTemplate } from "@/lib/email-template";
+import { getEmailBodyTemplate, getEmailTemplateAttachmentForSend } from "@/lib/email-template";
 import { enrichOpportunityLead } from "@/lib/lead-enrichment";
-import { emailForOpportunityWithTemplate, sendLeadEmail, smtpConfigured } from "@/lib/mailer";
+import { canRecordEmailWithoutSmtp, emailForOpportunityWithTemplate, sendLeadEmail, smtpConfigured } from "@/lib/mailer";
 import { getOperationsSettings } from "@/lib/operations-settings";
 import { prisma } from "@/lib/prisma";
 
@@ -11,7 +11,8 @@ export async function runAutomaticEmailPass() {
     return { skipped: true, reason: "disabled", sent: 0, failed: 0 };
   }
 
-  if (!smtpConfigured()) {
+  const debugNoSend = await canRecordEmailWithoutSmtp();
+  if (!debugNoSend && !smtpConfigured()) {
     await prisma.systemLog.create({
       data: {
         level: "warning",
@@ -47,6 +48,7 @@ export async function runAutomaticEmailPass() {
   });
 
   const bodyTemplate = await getEmailBodyTemplate();
+  const defaultAttachments = await getEmailTemplateAttachmentForSend();
   let sent = 0;
   let failed = 0;
   for (const candidate of candidates) {
@@ -58,7 +60,7 @@ export async function runAutomaticEmailPass() {
         where: { id: candidate.id },
         include: { company: true, game: true, outreachMessages: true }
       });
-      const result = await sendLeadEmail(refreshed, { subjectTemplate: emailSubjectTemplate, bodyTemplate });
+      const result = await sendLeadEmail(refreshed, { subjectTemplate: emailSubjectTemplate, bodyTemplate, attachments: defaultAttachments });
       const draft = emailForOpportunityWithTemplate(refreshed, { subjectTemplate: emailSubjectTemplate, bodyTemplate });
       if (result.draftId) {
         await prisma.outreachMessage.update({

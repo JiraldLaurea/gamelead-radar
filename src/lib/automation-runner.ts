@@ -5,7 +5,7 @@ import { getEmailBodyTemplate } from "@/lib/email-template";
 import { emailForOpportunityWithTemplate } from "@/lib/mailer";
 import { runAutomaticEmailPass } from "@/lib/auto-email";
 import { analyzePendingArticles } from "@/lib/lead-analysis-runner";
-import { getOperationsSettings } from "@/lib/operations-settings";
+import { getOperationsSettings, isWithinAutoEmailSchedule, setAutoEmailEnabled } from "@/lib/operations-settings";
 import { prisma } from "@/lib/prisma";
 
 type AutomationPhase = "idle" | "crawling" | "analyzing" | "sending" | "done" | "blocked" | "disabled" | "error";
@@ -52,6 +52,8 @@ const globalForAutomation = globalThis as typeof globalThis & {
   gameLeadAutomationState?: AutomationState;
 };
 
+const minimumTestAutomationDurationMs = 5000;
+
 function getState() {
   if (!globalForAutomation.gameLeadAutomationState) {
     globalForAutomation.gameLeadAutomationState = { status: initialStatus, promise: null, cancelRequested: false };
@@ -63,6 +65,16 @@ export async function getAutomationStatus() {
   const state = getState();
   const settings = await getOperationsSettings();
   const sentToday = await countEmailsSentToday();
+  if (!settings.autoEmailEnabled) {
+    updateStatus({
+      running: false,
+      phase: "disabled",
+      message: "Automatic email sending is disabled.",
+      sentToday,
+      target: settings.autoEmailDailyLimit
+    });
+    return state.status;
+  }
   const isTestRun = state.status.message.toLowerCase().includes("test automation") || state.status.message.toLowerCase().includes("test automatic");
   state.status = {
     ...state.status,
@@ -75,22 +87,41 @@ export async function getAutomationStatus() {
 
 export async function ensureAutomationRunning(reason = "settings") {
   const state = getState();
+  const settings = await getOperationsSettings();
+  const sentToday = await countEmailsSentToday();
+  if (!settings.autoEmailEnabled) {
+    state.cancelRequested = Boolean(state.promise);
+    updateStatus({ running: false, phase: "disabled", message: "Automatic email sending is disabled.", sentToday, target: settings.autoEmailDailyLimit });
+    return state.status;
+  }
   if (state.promise) return state.status;
   if (reason === "status check" && isTestAutomationStatus(state.status) && ["done", "blocked", "error"].includes(state.status.phase)) {
     return state.status;
   }
-  if (reason === "status check" && ["blocked", "error"].includes(state.status.phase)) {
-    return state.status;
-  }
-
-  const settings = await getOperationsSettings();
-  const sentToday = await countEmailsSentToday();
-  if (!settings.autoEmailEnabled) {
-    updateStatus({ running: false, phase: "disabled", message: "Automatic email sending is disabled.", sentToday, target: settings.autoEmailDailyLimit });
-    return state.status;
-  }
   if (sentToday >= settings.autoEmailDailyLimit) {
-    updateStatus({ running: false, phase: "done", message: "Daily email sending target reached.", sentToday, target: settings.autoEmailDailyLimit });
+    updateStatus({
+      running: false,
+      phase: "done",
+      message: getDailyLimitReachedMessage(settings.autoEmailScheduleEnabled),
+      sentToday,
+      target: settings.autoEmailDailyLimit
+    });
+    return state.status;
+  }
+  if (!isWithinAutoEmailSchedule(settings)) {
+    updateStatus({
+      running: false,
+      phase: "blocked",
+      message: `Automatic email sending is scheduled from ${settings.autoEmailScheduleStart} to ${settings.autoEmailScheduleEnd}.`,
+      sentToday,
+      target: settings.autoEmailDailyLimit
+    });
+    return state.status;
+  }
+  if (reason === "status check" && state.status.phase === "blocked" && !isSchedulePauseStatus(state.status)) {
+    return state.status;
+  }
+  if (reason === "status check" && state.status.phase === "error") {
     return state.status;
   }
 
@@ -114,11 +145,27 @@ export async function ensureTestAutomationRunning() {
 
 export async function requestAutomationCancel() {
   const state = getState();
-  if (!state.promise || !state.status.running) return state.status;
+  const settings = await getOperationsSettings();
+  await setAutoEmailEnabled(false);
+
+  if (!state.promise || !state.status.running) {
+    updateStatus({
+      running: false,
+      phase: "disabled",
+      message: "Automatic email sending is disabled.",
+      sentToday: await countEmailsSentToday(),
+      target: settings.autoEmailDailyLimit
+    });
+    return state.status;
+  }
 
   state.cancelRequested = true;
   updateStatus({
-    message: "Canceling automation after the current step finishes."
+    running: false,
+    phase: "disabled",
+    message: "Automatic email sending is disabled.",
+    sentToday: await countEmailsSentToday(),
+    target: settings.autoEmailDailyLimit
   });
   return state.status;
 }
@@ -150,8 +197,7 @@ async function runAutomationLoop(reason: string) {
     emailFailed: 0
   });
 
-  let noProgressCycles = 0;
-  for (let iteration = 1; iteration <= 120; iteration += 1) {
+  for (let iteration = 1; ; iteration += 1) {
     if (stopIfCancelRequested()) return;
     const settings = await getOperationsSettings();
     let sentToday = await countEmailsSentToday();
@@ -159,8 +205,24 @@ async function runAutomationLoop(reason: string) {
       updateStatus({ running: false, phase: "disabled", message: "Automation stopped because automatic email sending is disabled.", sentToday, target: settings.autoEmailDailyLimit });
       return;
     }
+    if (!isWithinAutoEmailSchedule(settings)) {
+      updateStatus({
+        running: false,
+        phase: "done",
+        message: `Scheduled email sending window ended (${settings.autoEmailScheduleStart} to ${settings.autoEmailScheduleEnd}).`,
+        sentToday,
+        target: settings.autoEmailDailyLimit
+      });
+      return;
+    }
     if (sentToday >= settings.autoEmailDailyLimit) {
-      updateStatus({ running: false, phase: "done", message: "Daily email sending target reached.", sentToday, target: settings.autoEmailDailyLimit });
+      updateStatus({
+        running: false,
+        phase: "done",
+        message: getDailyLimitReachedMessage(settings.autoEmailScheduleEnabled),
+        sentToday,
+        target: settings.autoEmailDailyLimit
+      });
       return;
     }
 
@@ -192,8 +254,21 @@ async function runAutomationLoop(reason: string) {
       message: `Cycle ${iteration}: analyzing up to ${settings.maxLeadAnalysisLimit} pending article${settings.maxLeadAnalysisLimit === 1 ? "" : "s"}.`,
       crawled: getState().status.crawled + crawl.articlesFound
     });
-    const analysis = await analyzePendingArticles(settings.maxLeadAnalysisLimit);
+    const analysis = await analyzePendingArticles(settings.maxLeadAnalysisLimit, { skipFailedArticles: true });
     if (stopIfCancelRequested()) return;
+    const pendingAfterAnalysis = await countPendingArticles();
+    const analysisCouldNotProcessPending = analysis.requested > 0 && analysis.analyzed === 0;
+    if (analysisCouldNotProcessPending) {
+      updateStatus({
+        phase: "analyzing",
+        message: `Cycle ${iteration}: skipped ${analysis.failed} article${analysis.failed === 1 ? "" : "s"} that could not be analyzed. Starting the next cycle.`,
+        analyzed: getState().status.analyzed,
+        analysisFailed: getState().status.analysisFailed + analysis.failed,
+        sentToday,
+        target: settings.autoEmailDailyLimit
+      });
+      continue;
+    }
 
     updateStatus({
       phase: "sending",
@@ -211,35 +286,49 @@ async function runAutomationLoop(reason: string) {
     });
 
     if (nextSentToday >= settings.autoEmailDailyLimit) {
-      updateStatus({ running: false, phase: "done", message: "Daily email sending target reached.", sentToday: nextSentToday, target: settings.autoEmailDailyLimit });
+      updateStatus({
+        running: false,
+        phase: "done",
+        message: getDailyLimitReachedMessage(settings.autoEmailScheduleEnabled),
+        sentToday: nextSentToday,
+        target: settings.autoEmailDailyLimit
+      });
       return;
     }
 
-    const pendingAfterAnalysis = await countPendingArticles();
     const madeProgress =
       nextSentToday > sentToday ||
       crawl.articlesSaved > 0 ||
       analysis.analyzed > 0 ||
       pendingAfterAnalysis < pendingBeforeAnalysis ||
       email.sent > 0;
-    noProgressCycles = madeProgress ? 0 : noProgressCycles + 1;
-    if (noProgressCycles >= 2 || email.reason === "smtp_missing") {
+    if (email.reason === "smtp_missing") {
       updateStatus({
         running: false,
         phase: "blocked",
-        message: email.reason === "smtp_missing" ? "SMTP is not configured, so automatic sending cannot continue." : "No additional eligible Grade A email leads were found.",
+        message: "SMTP is not configured, so automatic sending cannot continue.",
         sentToday: nextSentToday,
         target: settings.autoEmailDailyLimit
       });
       return;
     }
-  }
 
-  updateStatus({ running: false, phase: "blocked", message: "Automation stopped after 120 cycles without reaching the daily target." });
+    if (!madeProgress) {
+      updateStatus({
+        running: true,
+        phase: "crawling",
+        message: "No eligible Grade A email leads found yet. Continuing to crawl until today's target is reached.",
+        sentToday: nextSentToday,
+        target: settings.autoEmailDailyLimit
+      });
+      await waitForIdleRetry();
+    }
+  }
 }
 
 async function runTestAutomationLoop() {
-  const startedAt = new Date().toISOString();
+  const startedAtDate = new Date();
+  const startedAt = startedAtDate.toISOString();
   updateStatus({
     running: true,
     phase: "crawling",
@@ -293,6 +382,8 @@ async function runTestAutomationLoop() {
           });
     }
 
+    await waitForMinimumDuration(startedAtDate, minimumTestAutomationDurationMs);
+    if (stopIfCancelRequested()) return;
     updateStatus({
       running: false,
       phase: "done",
@@ -309,6 +400,7 @@ async function runTestAutomationLoop() {
         message: `Test automatic email failed: ${error instanceof Error ? error.message : "Unknown error"}`
       }
     });
+    await waitForMinimumDuration(startedAtDate, minimumTestAutomationDurationMs);
     updateStatus({
       running: false,
       phase: "error",
@@ -316,6 +408,27 @@ async function runTestAutomationLoop() {
       target: 1,
       emailFailed: 1
     });
+  }
+}
+
+async function waitForMinimumDuration(startedAt: Date, minimumDurationMs: number) {
+  const elapsedMs = Date.now() - startedAt.getTime();
+  const remainingMs = minimumDurationMs - elapsedMs;
+  if (remainingMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remainingMs));
+  }
+}
+
+async function waitForIdleRetry() {
+  const delayMs = Number(process.env.AUTOMATION_IDLE_RETRY_DELAY_MS ?? 30000);
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return;
+
+  const intervalMs = 1000;
+  let remainingMs = delayMs;
+  while (remainingMs > 0) {
+    if (getState().cancelRequested) return;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, remainingMs)));
+    remainingMs -= intervalMs;
   }
 }
 
@@ -430,16 +543,27 @@ function isTestAutomationStatus(status: AutomationStatus) {
   return message.includes("test automation") || message.includes("test automatic");
 }
 
+function isSchedulePauseStatus(status: AutomationStatus) {
+  const message = status.message.toLowerCase();
+  return message.includes("scheduled from") || message.includes("outside the scheduled window");
+}
+
 function stopIfCancelRequested() {
   const state = getState();
   if (!state.cancelRequested) return false;
 
   updateStatus({
     running: false,
-    phase: "blocked",
-    message: "Automation canceled."
+    phase: "disabled",
+    message: "Automatic email sending is disabled."
   });
   return true;
+}
+
+function getDailyLimitReachedMessage(scheduleEnabled: boolean) {
+  return scheduleEnabled
+    ? "Daily automated email sending limit reached. Automation is paused until the next scheduled window."
+    : "Daily email sending target reached.";
 }
 
 async function countEmailsSentToday() {
