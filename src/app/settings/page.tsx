@@ -1,4 +1,4 @@
-import { DatabaseBackup, Plus, SearchCheck, Trash2 } from "lucide-react";
+import { DatabaseBackup, SearchCheck, Trash2 } from "lucide-react";
 import { Shell } from "@/components/shell";
 import { LoadingForm } from "@/components/loading-form";
 import { EmailTemplateSettingsForm } from "@/components/email-template-settings-form";
@@ -38,7 +38,7 @@ export default async function SettingsPage({
     <Shell title="Settings" subtitle="Local configuration, safety switches, database status, and backups.">
       <div className="settings-page">
         <OperationsSettingsForm settings={operationsSettings} testLeadExists={testLeadExists} />
-        <DebugSettingsForm settings={debugSettings} />
+        <DebugSettingsForm settings={debugSettings} testDataStatus={params.testData} testLeadExists={testLeadExists} />
         <section className="panel settings-action-panel" style={{ marginTop: 16 }}>
           <EmailTemplateSettingsForm initialAttachment={emailTemplateAttachment} initialBody={emailBodyTemplate} />
         </section>
@@ -131,18 +131,6 @@ export default async function SettingsPage({
           <div className="settings-panel-footer">
             <LoadingForm action="/api/backup" loadingLabel="Running backup">
               <button className="button" type="submit"><DatabaseBackup size={16} /> Run Backup</button>
-            </LoadingForm>
-          </div>
-        </section>
-        <section className="panel settings-action-panel" style={{ marginTop: 16 }}>
-          <div className="settings-panel-body">
-            <SettingsPanelHeading title="Add Test Data" subtitle="Adds one Grade A test opportunity with a completed enrichment record and email address for outreach testing." />
-            {params.testData === "success" ? <p className="notice">Grade A test lead added with email jiraldcalusay@gmail.com.</p> : null}
-            {params.testData === "exists" ? <p className="notice warning">The Grade A sample lead already exists.</p> : null}
-          </div>
-          <div className="settings-panel-footer">
-            <LoadingForm action="/api/test-data" loadingLabel="Adding test data">
-              <button className="button" type="submit" disabled={testLeadExists}><Plus size={16} /> Add Test Data</button>
             </LoadingForm>
           </div>
         </section>

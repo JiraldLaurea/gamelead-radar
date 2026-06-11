@@ -1,11 +1,19 @@
 "use client";
 
-import { Loader, Save } from "lucide-react";
+import { Loader, Plus, Save } from "lucide-react";
 import { useState } from "react";
 import { LoadingForm, LoadingSpinner } from "@/components/loading-form";
 import type { DebugSettings } from "@/lib/operations-settings";
 
-export function DebugSettingsForm({ settings }: { settings: DebugSettings }) {
+export function DebugSettingsForm({
+  settings,
+  testDataStatus,
+  testLeadExists
+}: {
+  settings: DebugSettings;
+  testDataStatus?: string;
+  testLeadExists: boolean;
+}) {
   const formId = "debug-settings-save-form";
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
 
@@ -28,8 +36,15 @@ export function DebugSettingsForm({ settings }: { settings: DebugSettings }) {
             <small>Automation will still record sent email logs, but SMTP will not send to real leads.</small>
           </span>
         </label>
+        {testDataStatus === "success" ? <p className="notice">Grade A test lead added with email jiraldcalusay@gmail.com.</p> : null}
+        {testDataStatus === "exists" ? <p className="notice warning">The Grade A sample lead already exists.</p> : null}
       </LoadingForm>
       <div className="settings-panel-footer">
+        <LoadingForm action="/api/test-data" loadingLabel="Adding test data">
+          <button className="button secondary" type="submit" disabled={testLeadExists}>
+            <Plus size={16} /> Add Test Data
+          </button>
+        </LoadingForm>
         <button className="button secondary" type="button" onClick={() => setShowLoadingPreview(true)}>
           <Loader size={16} /> Show loading modal
         </button>
