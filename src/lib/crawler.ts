@@ -15,7 +15,7 @@ export async function crawlActiveSources(options: { maxArticles?: number } = {})
   const errors: string[] = [];
 
   const sources = await prisma.source.findMany({ where: { active: true }, orderBy: [{ priority: "asc" }, { name: "asc" }] });
-  await crawlSources(sources, { runId: run.id, articlesFound, articlesSaved, errors, articleLimit: options.maxArticles });
+  await crawlSources(orderSourcesForCrawl(sources), { runId: run.id, articlesFound, articlesSaved, errors, articleLimit: options.maxArticles });
 
   const finalRun = await prisma.crawlRun.findUniqueOrThrow({ where: { id: run.id } });
   return { articlesFound: finalRun.articlesFound, articlesSaved: finalRun.articlesSaved, errors };
@@ -35,11 +35,11 @@ async function crawlSources(
   state: { runId: string; articlesFound: number; articlesSaved: number; errors: string[]; articleLimit?: number }
 ) {
   for (const source of sources) {
-    if (state.articleLimit && state.articlesFound >= state.articleLimit) break;
+    if (state.articleLimit && state.articlesSaved >= state.articleLimit) break;
     try {
       const collected = await collectSourceItems(source);
       const sourceLimit = source.maxItemsPerRun ?? Number(process.env.MAX_ITEMS_PER_SOURCE ?? 30);
-      const remainingLimit = state.articleLimit ? Math.max(state.articleLimit - state.articlesFound, 0) : sourceLimit;
+      const remainingLimit = state.articleLimit ? Math.max(state.articleLimit - state.articlesSaved, 0) : sourceLimit;
       const selectedArticles = collected.slice(0, Math.min(sourceLimit, remainingLimit));
       state.articlesFound += selectedArticles.length;
       for (const article of selectedArticles) {
@@ -99,6 +99,16 @@ async function crawlSources(
       articlesSaved: state.articlesSaved,
       errorMessage: state.errors.length ? state.errors.join("\n") : null
     }
+  });
+}
+
+function orderSourcesForCrawl(sources: Awaited<ReturnType<typeof prisma.source.findMany>>) {
+  return [...sources].sort((a, b) => {
+    const aLastCrawled = a.lastCrawledAt?.getTime() ?? 0;
+    const bLastCrawled = b.lastCrawledAt?.getTime() ?? 0;
+    if (aLastCrawled !== bLastCrawled) return aLastCrawled - bLastCrawled;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return a.name.localeCompare(b.name);
   });
 }
 

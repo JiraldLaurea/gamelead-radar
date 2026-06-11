@@ -183,7 +183,7 @@ export function AutomationStatusBar({ initialStatus = null }: { initialStatus?: 
         <div className={`automation-status-bar status-${showPausedTopBar ? "blocked" : activeStatus.phase}`} role="status">
           <span className="automation-status-dot" aria-hidden="true" />
           <span className="automation-status-main">{statusLabel}</span>
-          <span>{activeStatus.message}</span>
+          <span className="automation-status-message">{activeStatus.message}</span>
           <span className="automation-status-metrics">
             Sent {sentCount}/{activeStatus.target}{isTestRun ? "" : " today"} - Cycle {activeStatus.iteration}
           </span>

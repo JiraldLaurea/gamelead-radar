@@ -46,20 +46,38 @@ export async function runAutomaticEmailPass() {
     orderBy: [{ score: "desc" }, { createdAt: "desc" }],
     take: Math.min(Math.max(remaining * 3, remaining), 50)
   });
+  if (candidates.length === 0) {
+    return { skipped: true, reason: "no_grade_a_candidates", sent: 0, failed: 0, candidatesChecked: 0, withoutEmail: 0 };
+  }
+  function emailCandidatePriority(candidate: (typeof candidates)[number]) {
+    if (candidate.company.contactEmail) return 0;
+    if (candidate.company.enrichmentStatus === "not_started" || !candidate.company.lastEnrichedAt) return 1;
+    return 2;
+  }
+  const prioritizedCandidates = [...candidates].sort((a, b) => emailCandidatePriority(a) - emailCandidatePriority(b));
 
   const bodyTemplate = await getEmailBodyTemplate();
   const defaultAttachments = await getEmailTemplateAttachmentForSend();
   let sent = 0;
   let failed = 0;
-  for (const candidate of candidates) {
+  let candidatesChecked = 0;
+  let withoutEmail = 0;
+  for (const candidate of prioritizedCandidates) {
     if (sent >= remaining) break;
+    candidatesChecked += 1;
     try {
-      const lead = await enrichOpportunityLead(candidate.id);
-      if (!lead.contactEmail) continue;
-      const refreshed = await prisma.opportunity.findUniqueOrThrow({
-        where: { id: candidate.id },
-        include: { company: true, game: true, outreachMessages: true }
-      });
+      let refreshed = candidate;
+      if (!candidate.company.contactEmail) {
+        const lead = await enrichOpportunityLead(candidate.id);
+        if (!lead.contactEmail) {
+          withoutEmail += 1;
+          continue;
+        }
+        refreshed = await prisma.opportunity.findUniqueOrThrow({
+          where: { id: candidate.id },
+          include: { company: true, game: true, outreachMessages: true }
+        });
+      }
       const result = await sendLeadEmail(refreshed, { subjectTemplate: emailSubjectTemplate, bodyTemplate, attachments: defaultAttachments });
       const draft = emailForOpportunityWithTemplate(refreshed, { subjectTemplate: emailSubjectTemplate, bodyTemplate });
       if (result.draftId) {
@@ -93,5 +111,12 @@ export async function runAutomaticEmailPass() {
     }
   }
 
-  return { skipped: false, sent, failed };
+  return {
+    skipped: sent === 0 && failed === 0,
+    reason: sent === 0 && failed === 0 ? "no_email_ready_leads" : undefined,
+    sent,
+    failed,
+    candidatesChecked,
+    withoutEmail
+  };
 }

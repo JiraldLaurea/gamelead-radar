@@ -5,7 +5,7 @@ import { getEmailBodyTemplate } from "@/lib/email-template";
 import { emailForOpportunityWithTemplate } from "@/lib/mailer";
 import { runAutomaticEmailPass } from "@/lib/auto-email";
 import { analyzePendingArticles } from "@/lib/lead-analysis-runner";
-import { getOperationsSettings, isWithinAutoEmailSchedule, setAutoEmailEnabled } from "@/lib/operations-settings";
+import { getOperationsSettings, isWithinAutoEmailSchedule, setAutoEmailEnabled, type OperationsSettings } from "@/lib/operations-settings";
 import { prisma } from "@/lib/prisma";
 
 type AutomationPhase = "idle" | "crawling" | "analyzing" | "sending" | "done" | "blocked" | "disabled" | "error";
@@ -30,6 +30,8 @@ type AutomationState = {
   status: AutomationStatus;
   promise: Promise<void> | null;
   cancelRequested: boolean;
+  scheduledTimer: ReturnType<typeof setTimeout> | null;
+  scheduledFor: string | null;
 };
 
 const initialStatus: AutomationStatus = {
@@ -56,7 +58,7 @@ const minimumTestAutomationDurationMs = 5000;
 
 function getState() {
   if (!globalForAutomation.gameLeadAutomationState) {
-    globalForAutomation.gameLeadAutomationState = { status: initialStatus, promise: null, cancelRequested: false };
+    globalForAutomation.gameLeadAutomationState = { status: initialStatus, promise: null, cancelRequested: false, scheduledTimer: null, scheduledFor: null };
   }
   return globalForAutomation.gameLeadAutomationState;
 }
@@ -91,14 +93,19 @@ export async function ensureAutomationRunning(reason = "settings") {
   const sentToday = await countEmailsSentToday();
   if (!settings.autoEmailEnabled) {
     state.cancelRequested = Boolean(state.promise);
+    clearScheduledAutomationRun();
     updateStatus({ running: false, phase: "disabled", message: "Automatic email sending is disabled.", sentToday, target: settings.autoEmailDailyLimit });
     return state.status;
   }
-  if (state.promise) return state.status;
+  if (state.promise) {
+    clearScheduledAutomationRun();
+    return state.status;
+  }
   if (reason === "status check" && isTestAutomationStatus(state.status) && ["done", "blocked", "error"].includes(state.status.phase)) {
     return state.status;
   }
   if (sentToday >= settings.autoEmailDailyLimit) {
+    scheduleNextAutomationRun(settings);
     updateStatus({
       running: false,
       phase: "done",
@@ -109,6 +116,7 @@ export async function ensureAutomationRunning(reason = "settings") {
     return state.status;
   }
   if (!isWithinAutoEmailSchedule(settings)) {
+    scheduleNextAutomationRun(settings);
     updateStatus({
       running: false,
       phase: "blocked",
@@ -125,6 +133,7 @@ export async function ensureAutomationRunning(reason = "settings") {
     return state.status;
   }
 
+  clearScheduledAutomationRun();
   state.promise = runAutomationLoop(reason).finally(() => {
     state.promise = null;
     state.cancelRequested = false;
@@ -147,6 +156,7 @@ export async function requestAutomationCancel() {
   const state = getState();
   const settings = await getOperationsSettings();
   await setAutoEmailEnabled(false);
+  clearScheduledAutomationRun();
 
   if (!state.promise || !state.status.running) {
     updateStatus({
@@ -172,6 +182,7 @@ export async function requestAutomationCancel() {
 
 export async function disableAutomationStatus() {
   const settings = await getOperationsSettings();
+  clearScheduledAutomationRun();
   updateStatus({
     running: false,
     phase: "disabled",
@@ -180,6 +191,55 @@ export async function disableAutomationStatus() {
     target: settings.autoEmailDailyLimit
   });
   return getState().status;
+}
+
+function scheduleNextAutomationRun(settings: OperationsSettings) {
+  const state = getState();
+  if (!settings.autoEmailEnabled || !settings.autoEmailScheduleEnabled) {
+    clearScheduledAutomationRun();
+    return;
+  }
+
+  const nextRunAt = getNextScheduleStart(settings);
+  const nextRunAtIso = nextRunAt.toISOString();
+  if (state.scheduledFor === nextRunAtIso && state.scheduledTimer) return;
+
+  clearScheduledAutomationRun();
+  const delayMs = Math.max(1000, nextRunAt.getTime() - Date.now());
+  state.scheduledFor = nextRunAtIso;
+  state.scheduledTimer = setTimeout(() => {
+    const currentState = getState();
+    currentState.scheduledTimer = null;
+    currentState.scheduledFor = null;
+    void ensureAutomationRunning("scheduled window").catch(async (error) => {
+      await prisma.systemLog.create({
+        data: {
+          level: "error",
+          module: "automation",
+          message: `Scheduled automation failed to start: ${error instanceof Error ? error.message : "Unknown error"}`
+        }
+      });
+    });
+  }, delayMs);
+}
+
+function clearScheduledAutomationRun() {
+  const state = getState();
+  if (state.scheduledTimer) {
+    clearTimeout(state.scheduledTimer);
+  }
+  state.scheduledTimer = null;
+  state.scheduledFor = null;
+}
+
+function getNextScheduleStart(settings: OperationsSettings, now = new Date()) {
+  const [hour, minute] = settings.autoEmailScheduleStart.split(":").map(Number);
+  const next = new Date(now);
+  next.setHours(hour, minute, 0, 0);
+  if (next <= now) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next;
 }
 
 async function runAutomationLoop(reason: string) {
@@ -206,6 +266,7 @@ async function runAutomationLoop(reason: string) {
       return;
     }
     if (!isWithinAutoEmailSchedule(settings)) {
+      scheduleNextAutomationRun(settings);
       updateStatus({
         running: false,
         phase: "done",
@@ -216,6 +277,7 @@ async function runAutomationLoop(reason: string) {
       return;
     }
     if (sentToday >= settings.autoEmailDailyLimit) {
+      scheduleNextAutomationRun(settings);
       updateStatus({
         running: false,
         phase: "done",
@@ -252,7 +314,7 @@ async function runAutomationLoop(reason: string) {
     updateStatus({
       phase: "analyzing",
       message: `Cycle ${iteration}: analyzing up to ${settings.maxLeadAnalysisLimit} pending article${settings.maxLeadAnalysisLimit === 1 ? "" : "s"}.`,
-      crawled: getState().status.crawled + crawl.articlesFound
+      crawled: getState().status.crawled + crawl.articlesSaved
     });
     const analysis = await analyzePendingArticles(settings.maxLeadAnalysisLimit, { skipFailedArticles: true });
     if (stopIfCancelRequested()) return;
@@ -272,7 +334,7 @@ async function runAutomationLoop(reason: string) {
 
     updateStatus({
       phase: "sending",
-      message: `Cycle ${iteration}: sending Grade A emails.`,
+      message: `Cycle ${iteration}: checking for email-ready Grade A leads.`,
       analyzed: getState().status.analyzed + analysis.analyzed,
       analysisFailed: getState().status.analysisFailed + analysis.failed
     });
@@ -282,7 +344,8 @@ async function runAutomationLoop(reason: string) {
     updateStatus({
       emailsSent: getState().status.emailsSent + email.sent,
       emailFailed: getState().status.emailFailed + email.failed,
-      sentToday: nextSentToday
+      sentToday: nextSentToday,
+      message: getPostEmailPassMessage(iteration, email, crawl)
     });
 
     if (nextSentToday >= settings.autoEmailDailyLimit) {
@@ -317,7 +380,7 @@ async function runAutomationLoop(reason: string) {
       updateStatus({
         running: true,
         phase: "crawling",
-        message: "No eligible Grade A email leads found yet. Continuing to crawl until today's target is reached.",
+        message: getNoProgressMessage(crawl),
         sentToday: nextSentToday,
         target: settings.autoEmailDailyLimit
       });
@@ -564,6 +627,44 @@ function getDailyLimitReachedMessage(scheduleEnabled: boolean) {
   return scheduleEnabled
     ? "Daily automated email sending limit reached. Automation is paused until the next scheduled window."
     : "Daily email sending target reached.";
+}
+
+function getPostEmailPassMessage(
+  iteration: number,
+  email: { sent: number; failed: number; reason?: string; candidatesChecked?: number; withoutEmail?: number },
+  crawl: { articlesFound: number; articlesSaved: number }
+) {
+  if (email.sent > 0) {
+    return `Cycle ${iteration}: sent ${email.sent} Grade A email${email.sent === 1 ? "" : "s"}.`;
+  }
+  if (email.reason === "no_grade_a_candidates") {
+    return `Cycle ${iteration}: no unsent Grade A leads are available yet.`;
+  }
+  if (email.reason === "no_email_ready_leads") {
+    const checked = email.candidatesChecked ?? 0;
+    const withoutEmail = email.withoutEmail ?? 0;
+    if (checked > 0 && withoutEmail > 0) {
+      return `Cycle ${iteration}: checked ${checked} Grade A lead${checked === 1 ? "" : "s"}, but none had a usable email address.`;
+    }
+    return `Cycle ${iteration}: no email-ready Grade A leads were found.`;
+  }
+  if (email.failed > 0) {
+    return `Cycle ${iteration}: email pass finished with ${email.failed} failure${email.failed === 1 ? "" : "s"}.`;
+  }
+  if (crawl.articlesFound > 0 && crawl.articlesSaved === 0) {
+    return `Cycle ${iteration}: latest crawl found ${crawl.articlesFound} source item${crawl.articlesFound === 1 ? "" : "s"}, but saved 0 new articles.`;
+  }
+  return `Cycle ${iteration}: email pass finished with no emails sent.`;
+}
+
+function getNoProgressMessage(crawl: { articlesFound: number; articlesSaved: number }) {
+  if (crawl.articlesFound > 0 && crawl.articlesSaved === 0) {
+    return `No email-ready Grade A leads found. Latest crawl found ${crawl.articlesFound} source item${crawl.articlesFound === 1 ? "" : "s"}, but saved 0 new articles; retrying shortly.`;
+  }
+  if (crawl.articlesFound === 0) {
+    return "No email-ready Grade A leads found. Latest crawl found no source items; retrying shortly.";
+  }
+  return `No email-ready Grade A leads found. Latest crawl saved ${crawl.articlesSaved} new article${crawl.articlesSaved === 1 ? "" : "s"}; continuing analysis.`;
 }
 
 async function countEmailsSentToday() {
