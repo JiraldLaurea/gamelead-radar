@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { Filter, RotateCcw } from "lucide-react";
 import { Shell } from "@/components/shell";
 import { LeadEnrichmentTable } from "@/components/lead-enrichment-table";
 import { getEmailBodyTemplate } from "@/lib/email-template";
@@ -9,11 +7,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const companyWhere = {
     ...(params.country ? { country: params.country } : {}),
-    ...(params.enrichmentStatus ? { enrichmentStatus: params.enrichmentStatus } : {})
+    ...(params.enrichmentStatus ? { enrichmentStatus: params.enrichmentStatus } : {}),
+    ...(params.emailStatus === "has_email" ? { contactEmail: { not: null } } : {}),
+    ...(params.emailStatus === "no_email" ? { contactEmail: null } : {}),
+    ...(params.emailStatus === "not_found" ? { contactEmail: null, enrichmentStatus: { not: "not_started" } } : {})
   };
   const where = {
     ...(params.grade ? { grade: params.grade } : {}),
-    ...(params.status ? { status: params.status } : {}),
     ...(Object.keys(companyWhere).length ? { company: companyWhere } : {}),
     ...(params.stage ? { game: { launchStage: params.stage } } : {})
   };
@@ -21,8 +21,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     prisma.opportunity.findMany({
       where,
       include: { company: true, game: true, article: { include: { source: true } } },
-      orderBy: [{ grade: "asc" }, { score: "desc" }],
-      take: 100
+      orderBy: [{ grade: "asc" }, { score: "desc" }]
     }),
     prisma.company.findMany({ select: { country: true }, distinct: ["country"], orderBy: { country: "asc" } }),
     prisma.game.findMany({ select: { launchStage: true }, distinct: ["launchStage"], orderBy: { launchStage: "asc" } }),
@@ -30,56 +29,6 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   ]);
   return (
     <Shell title="Lead List" subtitle="Qualified QROAD opportunities with scoring, packages, and status.">
-      <section className="panel">
-        <form className="filter-row" method="get">
-          <select name="grade" defaultValue={params.grade ?? ""}>
-            <option value="">All grades</option>
-            <option value="A">Grade A</option>
-            <option value="B">Grade B</option>
-            <option value="C">Grade C</option>
-            <option value="D">Grade D</option>
-          </select>
-          <select name="status" defaultValue={params.status ?? ""}>
-            <option value="">All statuses</option>
-            <option value="new">New</option>
-            <option value="needs_research">Needs research</option>
-            <option value="draft_ready">Draft ready</option>
-            <option value="contacted">Contacted</option>
-            <option value="archived">Archived</option>
-          </select>
-          <select name="country" defaultValue={params.country ?? ""}>
-            <option value="">All countries</option>
-            {countries
-              .filter((country) => country.country)
-              .map((country) => (
-                <option key={country.country} value={country.country}>
-                  {country.country}
-                </option>
-              ))}
-          </select>
-          <select name="stage" defaultValue={params.stage ?? ""}>
-            <option value="">All stages</option>
-            {stages
-              .filter((stage) => stage.launchStage)
-              .map((stage) => (
-                <option key={stage.launchStage} value={stage.launchStage}>
-                  {stage.launchStage.replaceAll("_", " ")}
-                </option>
-              ))}
-          </select>
-          <select name="enrichmentStatus" defaultValue={params.enrichmentStatus ?? ""}>
-            <option value="">All enrichment</option>
-            <option value="not_started">Not started</option>
-            <option value="processing">Processing</option>
-            <option value="completed">Completed</option>
-            <option value="partial">Partial</option>
-            <option value="failed">Failed</option>
-            <option value="manual_review">Manual review</option>
-          </select>
-          <button className="button" type="submit"><Filter size={16} /> Filter</button>
-          <Link className="button secondary" href="/leads"><RotateCcw size={16} /> Reset</Link>
-        </form>
-      </section>
       {params.enriched ? <p className="notice">Enrichment finished for {params.enriched} lead(s).</p> : null}
       {params.analyzed ? (
         <p className={params.analysisFailed && params.analysisFailed !== "0" ? "notice warning" : "notice"}>
@@ -97,6 +46,17 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <div className="lead-list-section">
         <LeadEnrichmentTable
           emailBodyTemplate={emailBodyTemplate}
+          filterOptions={{
+            countries: countries.map((country) => country.country).filter(Boolean),
+            stages: stages.map((stage) => stage.launchStage).filter(Boolean),
+            values: {
+              country: params.country,
+              emailStatus: params.emailStatus,
+              enrichmentStatus: params.enrichmentStatus,
+              grade: params.grade,
+              stage: params.stage
+            }
+          }}
           leads={leads.map((lead) => ({
             id: lead.id,
             grade: lead.grade,

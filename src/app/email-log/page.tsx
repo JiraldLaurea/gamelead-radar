@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { Filter, RotateCcw } from "lucide-react";
 import { EmailLogTable } from "@/components/email-log-table";
 import { Shell } from "@/components/shell";
 import { prisma } from "@/lib/prisma";
@@ -57,43 +55,17 @@ export default async function EmailLogPage({ searchParams }: { searchParams: Pro
   return (
     <Shell title="Email Log" subtitle="Sent outreach emails with recipient details and message content.">
       <div className="email-log-page">
-        <section className="panel email-log-filter-panel">
-          <form className="filter-row email-log-filter-row" method="get">
-            <label>
-              From
-              <input name="from" type="date" defaultValue={params.from ?? ""} />
-            </label>
-            <label>
-              To
-              <input name="to" type="date" defaultValue={params.to ?? ""} />
-            </label>
-            <label>
-              Company
-              <select name="companyId" defaultValue={params.companyId ?? ""}>
-                <option value="">All businesses</option>
-                {uniqueCompanies(companies.map((item) => item.opportunity.company)).map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Status
-              <select name="status" defaultValue={selectedStatus}>
-                <option value="">All statuses</option>
-                {statuses.map((status) => (
-                  <option key={status.status} value={status.status}>
-                    {status.status.replaceAll("_", " ")}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="button" type="submit"><Filter size={16} /> Filter</button>
-            <Link className="button secondary" href="/email-log"><RotateCcw size={16} /> Reset</Link>
-          </form>
-        </section>
         <EmailLogTable
+          filterOptions={{
+            companies: uniqueCompanies(companies.map((item) => item.opportunity.company)),
+            statuses: statuses.map((status) => status.status),
+            values: {
+              companyId: params.companyId,
+              from: params.from,
+              status: selectedStatus,
+              to: params.to
+            }
+          }}
           messages={messages.map((message) => ({
             id: message.id,
             leadId: message.opportunity.id,

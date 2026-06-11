@@ -135,9 +135,9 @@ textarea {
 }
 
 .automation-status-bar {
-  height: 50px;
+  min-height: 50px;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px 12px;
   margin-bottom: 18px;
@@ -168,16 +168,27 @@ textarea {
 }
 
 .automation-status-main {
+  flex: 0 0 auto;
   font-weight: 700;
 }
 
+.automation-status-message {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .automation-status-metrics {
-  margin-left: auto;
+  flex: 0 0 auto;
   color: inherit;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .automation-status-ok {
+  flex: 0 0 auto;
   min-height: 28px;
   padding: 4px 10px;
   border: 1px solid #99d8ca;
@@ -199,6 +210,7 @@ textarea {
 } */
 
 .automation-status-close {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1123,6 +1135,15 @@ th {
   gap: 10px;
 }
 
+.lead-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .lead-bulk-actions span,
 .inline-muted {
   color: var(--muted);
@@ -1189,7 +1210,7 @@ th {
 }
 
 .lead-list-table-wrap {
-  max-height: 620px;
+  max-height: 480px;
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -1199,12 +1220,12 @@ th {
 }
 
 .lead-list-table {
-  min-width: 1650px;
+  min-width: 1040px;
   table-layout: fixed;
 }
 
 .dashboard-recent-leads-table {
-  min-width: 1180px;
+  min-width: 820px;
 }
 
 .email-log-page {
@@ -1214,17 +1235,8 @@ th {
   width: 100%;
 }
 
-.email-log-filter-panel {
-  padding: 18px;
-}
-
-.email-log-filter-row {
-  grid-template-columns: repeat(4, minmax(160px, 1fr)) auto auto;
-  align-items: end;
-}
-
 .email-log-table-wrap {
-  max-height: 640px;
+  max-height: 480px;
   width: 100%;
   scrollbar-gutter: auto;
 }
@@ -1336,6 +1348,37 @@ th {
 
 .table-subheader-row th {
   border-bottom: 0;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.table-pagination-rows {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table-pagination-rows select {
+  width: 92px;
+  min-height: 40px;
+  padding-right: 36px;
 }
 
 .email-log-table td {
@@ -1454,30 +1497,6 @@ th {
 
 .lead-game-column {
   width: 320px;
-}
-
-.lead-platform-column {
-  width: 150px;
-}
-
-.lead-stage-column {
-  width: 140px;
-}
-
-.lead-packages-column {
-  width: 180px;
-}
-
-.lead-enrichment-column {
-  width: 150px;
-}
-
-.lead-source-column {
-  width: 180px;
-}
-
-.lead-status-column {
-  width: 150px;
 }
 
 .lead-action-column {
@@ -2001,6 +2020,20 @@ th {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 18px 60px rgba(16, 35, 31, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.filters-modal {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.filters-modal-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 18px 20px;
+}
+
+.filters-modal-actions {
+  justify-content: flex-end;
 }
 
 .modal-scroll {

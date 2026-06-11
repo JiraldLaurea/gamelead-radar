@@ -1,7 +1,8 @@
 "use client";
 
 import Checkbox from "@mui/material/Checkbox";
-import { ChevronDown, Download, Pencil, Plus, RotateCcw, SearchCheck, Send, Trash2, X } from "lucide-react";
+import { ChevronDown, Filter, Pencil, Plus, RotateCcw, SearchCheck, Send, Trash2, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { emailSubjectTemplate } from "@/lib/email-template-defaults";
@@ -39,15 +40,33 @@ const checkboxSx = {
 
 const emailPlaceholders = ["[company_name]", "[game_title]", "[opportunity_type]"] as const;
 
-export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTemplate: string; leads: LeadRow[] }) {
+type LeadFilterOptions = {
+  countries: string[];
+  stages: string[];
+  values: Record<string, string | undefined>;
+};
+
+export function LeadEnrichmentTable({
+  emailBodyTemplate,
+  filterOptions,
+  leads
+}: {
+  emailBodyTemplate: string;
+  filterOptions?: LeadFilterOptions;
+  leads: LeadRow[];
+}) {
+  const filters = filterOptions ?? { countries: [], stages: [], values: {} };
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(100);
   const [emailNotice, setEmailNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [emailSubject, setEmailSubject] = useState(emailSubjectTemplate);
   const [emailBody, setEmailBody] = useState(emailBodyTemplate);
@@ -59,7 +78,14 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const selectedLeads = useMemo(() => leads.filter((lead) => selectedSet.has(lead.id)), [leads, selectedSet]);
   const selectedWithEmail = selectedLeads.filter((lead) => lead.email);
-  const allVisibleSelected = leads.length > 0 && selected.length === leads.length;
+  const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLeads = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return leads.slice(start, start + rowsPerPage);
+  }, [currentPage, leads, rowsPerPage]);
+  const paginatedLeadIds = useMemo(() => paginatedLeads.map((lead) => lead.id), [paginatedLeads]);
+  const allVisibleSelected = paginatedLeadIds.length > 0 && paginatedLeadIds.every((id) => selectedSet.has(id));
   const exportOptions = [
     ["All leads CSV", "/api/export?format=csv"],
     ["Enriched leads CSV", "/api/export?format=csv&type=enriched"],
@@ -87,7 +113,15 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
   }
 
   function toggleAll() {
-    setSelected(allVisibleSelected ? [] : leads.map((lead) => lead.id));
+    setSelected((current) => {
+      if (allVisibleSelected) return current.filter((id) => !paginatedLeadIds.includes(id));
+      return [...new Set([...current, ...paginatedLeadIds])];
+    });
+  }
+
+  function changeRowsPerPage(value: string) {
+    setRowsPerPage(Number(value));
+    setPage(1);
   }
 
   async function sendSelectedEmails() {
@@ -319,23 +353,109 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
         </div>
       ) : null}
       {emailNotice ? <p className={emailNotice.kind === "success" ? "notice" : "notice warning"}>{emailNotice.text}</p> : null}
+      {showFiltersModal ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowFiltersModal(false)}>
+          <div className="modal filters-modal" role="dialog" aria-modal="true" aria-labelledby="lead-filters-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2 id="lead-filters-title">Lead filters</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowFiltersModal(false)} aria-label="Close lead filters">
+                <X size={18} />
+              </button>
+            </div>
+            <form method="get">
+              <div className="modal-body filters-modal-body">
+                <label>
+                  Grade
+                  <select name="grade" defaultValue={filters.values.grade ?? ""}>
+                    <option value="">All grades</option>
+                    <option value="A">Grade A</option>
+                    <option value="B">Grade B</option>
+                    <option value="C">Grade C</option>
+                    <option value="D">Grade D</option>
+                  </select>
+                </label>
+                <label>
+                  Email
+                  <select name="emailStatus" defaultValue={filters.values.emailStatus ?? ""}>
+                    <option value="">All email statuses</option>
+                    <option value="has_email">Has email</option>
+                    <option value="no_email">No email</option>
+                    <option value="not_found">Not found</option>
+                  </select>
+                </label>
+                <label>
+                  Country
+                  <select name="country" defaultValue={filters.values.country ?? ""}>
+                    <option value="">All countries</option>
+                    {filters.countries.map((country) => (
+                      <option key={country} value={country}>
+                        {country}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Stage
+                  <select name="stage" defaultValue={filters.values.stage ?? ""}>
+                    <option value="">All stages</option>
+                    {filters.stages.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Enrichment
+                  <select name="enrichmentStatus" defaultValue={filters.values.enrichmentStatus ?? ""}>
+                    <option value="">All enrichment</option>
+                    <option value="not_started">Not started</option>
+                    <option value="processing">Processing</option>
+                    <option value="completed">Completed</option>
+                    <option value="partial">Partial</option>
+                    <option value="failed">Failed</option>
+                    <option value="manual_review">Manual review</option>
+                  </select>
+                </label>
+              </div>
+              <div className="modal-footer filters-modal-actions">
+                <Link className="button secondary" href="/leads">
+                  <RotateCcw size={16} /> Reset
+                </Link>
+                <button className="button" type="submit">
+                  <Filter size={16} /> Apply Filters
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
       <LoadingForm action="/api/leads/enrich" loadingLabel="Enriching leads">
       {leads.map((lead) => (
         <input key={lead.id} name="visibleLeadIds" type="hidden" value={lead.id} />
       ))}
+      {selected.map((leadId) => (
+        <input key={leadId} name="leadIds" type="hidden" value={leadId} />
+      ))}
       <div className="lead-bulk-actions">
         <div className="lead-bulk-action-group">
-          <button className="button" type="submit" disabled={selected.length === 0} data-loading-label="Enriching selected leads">
-            <SearchCheck size={16} /> Enrich Selected
-          </button>
-          <button className="button secondary" type="button" onClick={() => setShowEmailModal(true)} disabled={selectedWithEmail.length === 0 || sendingEmail}>
+          <button className="button" type="button" onClick={() => setShowEmailModal(true)} disabled={selectedWithEmail.length === 0 || sendingEmail}>
             <Pencil size={16} /> Compose Email
+          </button>
+          <button className="button secondary" type="submit" disabled={selected.length === 0} data-loading-label="Enriching selected leads">
+            <SearchCheck size={16} /> Enrich Selected
           </button>
           <button className="button secondary" type="button" onClick={() => setShowDeleteModal(true)} disabled={selected.length === 0}>
             <Trash2 size={16} /> Delete
           </button>
         </div>
-        <div className="export-menu" ref={exportMenuRef}>
+        <div className="lead-toolbar-actions">
+          <button className="button secondary" type="button" onClick={() => setShowFiltersModal(true)}>
+            <Filter size={16} /> Show Filters
+          </button>
+          <div className="export-menu" ref={exportMenuRef}>
           <button
             className="button secondary"
             type="button"
@@ -353,6 +473,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
               ))}
             </div>
           ) : null}
+          </div>
         </div>
       </div>
       <div className="table-wrap">
@@ -372,7 +493,7 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                     aria-label="Select all visible leads"
                     checked={allVisibleSelected}
                     disabled={leads.length === 0}
-                    indeterminate={selected.length > 0 && !allVisibleSelected}
+                    indeterminate={paginatedLeadIds.some((id) => selectedSet.has(id)) && !allVisibleSelected}
                     size="small"
                     sx={checkboxSx}
                     onChange={(event) => event.stopPropagation()}
@@ -395,21 +516,15 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
               <th className="lead-email-column">Email</th>
               <th className="lead-country-column">Country</th>
               <th className="lead-game-column">Game</th>
-              <th className="lead-platform-column">Platform</th>
-              <th className="lead-stage-column">Stage</th>
-              <th className="lead-packages-column">Packages</th>
-              <th className="lead-enrichment-column">Enrichment</th>
-              <th className="lead-source-column">Source</th>
-              <th className="lead-status-column">Status</th>
             </tr>
             <tr className="table-subheader-row">
-              <th className="table-subheader-cell" colSpan={12}>
+              <th className="table-subheader-cell" colSpan={6}>
                 {leads.length} lead{leads.length === 1 ? "" : "s"} &bull; {selected.length} selected
               </th>
             </tr>
           </thead>
           <tbody>
-            {leads.map((lead) => (
+            {paginatedLeads.map((lead) => (
               <tr
                 className={selectedSet.has(lead.id) ? "selected-row clickable-row" : "clickable-row"}
                 key={lead.id}
@@ -426,10 +541,8 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                     <Checkbox
                       aria-label={`Select ${lead.company}`}
                       checked={selectedSet.has(lead.id)}
-                      name="leadIds"
                       size="small"
                       sx={checkboxSx}
-                      value={lead.id}
                       onChange={(event) => event.stopPropagation()}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -461,19 +574,31 @@ export function LeadEnrichmentTable({ emailBodyTemplate, leads }: { emailBodyTem
                 </td>
                 <td>{lead.country}</td>
                 <td>{lead.game}</td>
-                <td>{lead.platform}</td>
-                <td>{lead.stage}</td>
-                <td><span className="one-line-cell">{lead.packages}</span></td>
-                <td>
-                  <span className={`badge status-${lead.enrichmentStatus}`}>{lead.enrichmentStatus.replaceAll("_", " ")}</span>
-                  <span className="cell-subtle">{lead.enrichmentConfidence}% confidence</span>
-                </td>
-                <td>{lead.source}</td>
-                <td>{lead.status}</td>
               </tr>
             ))}
           </tbody>
           </table>
+        </div>
+      </div>
+      <div className="table-pagination" aria-label="Leads table pagination">
+        <span>
+          Page {currentPage} of {totalPages}
+        </span>
+        <div className="table-pagination-actions">
+          <label className="table-pagination-rows">
+            Rows
+            <select value={rowsPerPage} onChange={(event) => changeRowsPerPage(event.target.value)}>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <button className="button secondary" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage <= 1}>
+            Previous
+          </button>
+          <button className="button secondary" type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={currentPage >= totalPages}>
+            Next
+          </button>
         </div>
       </div>
       </LoadingForm>

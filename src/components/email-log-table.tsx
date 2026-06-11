@@ -1,7 +1,7 @@
 "use client";
 
 import Checkbox from "@mui/material/Checkbox";
-import { Eye, Trash2, X } from "lucide-react";
+import { Eye, Filter, RotateCcw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -32,10 +32,18 @@ const checkboxSx = {
   }
 };
 
-export function EmailLogTable({ messages }: { messages: EmailLogRow[] }) {
+type EmailLogFilterOptions = {
+  companies: Array<{ id: string; name: string }>;
+  statuses: string[];
+  values: Record<string, string | undefined>;
+};
+
+export function EmailLogTable({ filterOptions, messages }: { filterOptions?: EmailLogFilterOptions; messages: EmailLogRow[] }) {
+  const filters = filterOptions ?? { companies: [], statuses: [], values: {} };
   const router = useRouter();
   const [selectedMessage, setSelectedMessage] = useState<EmailLogRow | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -81,10 +89,69 @@ export function EmailLogTable({ messages }: { messages: EmailLogRow[] }) {
   return (
     <>
       <div className="email-log-actions">
+        <button className="button secondary" type="button" onClick={() => setShowFiltersModal(true)}>
+          <Filter size={16} /> Show Filters
+        </button>
         <button className="button secondary" type="button" onClick={() => setShowDeleteModal(true)} disabled={selected.length === 0}>
           <Trash2 size={16} /> Delete
         </button>
       </div>
+      {showFiltersModal ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowFiltersModal(false)}>
+          <div className="modal filters-modal" role="dialog" aria-modal="true" aria-labelledby="email-log-filters-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h2 id="email-log-filters-title">Email log filters</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowFiltersModal(false)} aria-label="Close email log filters">
+                <X size={18} />
+              </button>
+            </div>
+            <form method="get">
+              <div className="modal-body filters-modal-body">
+                <label>
+                  From
+                  <input name="from" type="date" defaultValue={filters.values.from ?? ""} />
+                </label>
+                <label>
+                  To
+                  <input name="to" type="date" defaultValue={filters.values.to ?? ""} />
+                </label>
+                <label>
+                  Company
+                  <select name="companyId" defaultValue={filters.values.companyId ?? ""}>
+                    <option value="">All businesses</option>
+                    {filters.companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select name="status" defaultValue={filters.values.status ?? "sent"}>
+                    <option value="">All statuses</option>
+                    {filters.statuses.map((status) => (
+                      <option key={status} value={status}>
+                        {status.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="modal-footer filters-modal-actions">
+                <Link className="button secondary" href="/email-log">
+                  <RotateCcw size={16} /> Reset
+                </Link>
+                <button className="button" type="submit">
+                  <Filter size={16} /> Apply Filters
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
       <div className="table-wrap email-log-table-shell">
         <div className="table-scroll email-log-table-wrap">
           <table className="email-log-table">

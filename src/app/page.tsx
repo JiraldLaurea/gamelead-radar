@@ -8,11 +8,30 @@ import { getOperationsSettings } from "@/lib/operations-settings";
 export default async function DashboardPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const [emailsSentToday, articlesToday, gradeALeadsToday, totalEmailsSent, totalArticles, analyzedArticles, unprocessedArticles, totalLeads, totalGradeALeads, lastRun, recentLeads, operationsSettings] =
+  const [
+    emailsSentToday,
+    articlesToday,
+    processedArticlesToday,
+    unprocessedArticlesToday,
+    gradeALeadsToday,
+    totalLeadsToday,
+    totalEmailsSent,
+    totalArticles,
+    analyzedArticles,
+    unprocessedArticles,
+    totalLeads,
+    totalGradeALeads,
+    lastRun,
+    recentLeads,
+    operationsSettings
+  ] =
     await Promise.all([
       prisma.outreachMessage.count({ where: { channel: "email", status: "sent", updatedAt: { gte: today } } }),
       prisma.article.count({ where: { createdAt: { gte: today } } }),
+      prisma.article.count({ where: { processed: true, createdAt: { gte: today } } }),
+      prisma.article.count({ where: { processed: false, createdAt: { gte: today } } }),
       prisma.opportunity.count({ where: { grade: "A", createdAt: { gte: today } } }),
+      prisma.opportunity.count({ where: { createdAt: { gte: today } } }),
       prisma.outreachMessage.count({ where: { channel: "email", status: "sent" } }),
       prisma.article.count(),
       prisma.article.count({ where: { processed: true } }),
@@ -34,8 +53,8 @@ export default async function DashboardPage() {
       <DashboardStatsTabs
         daily={[
           { label: "Emails sent today", value: emailsSentToday, hint: `Daily email sending limit: ${operationsSettings.autoEmailDailyLimit}` },
-          { label: "Grade A leads today", value: gradeALeadsToday, hint: `Total leads today: ${totalLeads}` },
-          { label: "Crawled articles today", value: articlesToday, hint: `${analyzedArticles} processed / ${unprocessedArticles} unprocessed` }
+          { label: "Grade A leads today", value: gradeALeadsToday, hint: `Total leads today: ${totalLeadsToday}` },
+          { label: "Crawled articles today", value: articlesToday, hint: `${processedArticlesToday} processed today / ${unprocessedArticlesToday} unprocessed today` }
         ]}
         total={[
           { label: "Total email sent", value: totalEmailsSent, hint: `Sent today: ${emailsSentToday}/${operationsSettings.autoEmailDailyLimit}` },
@@ -72,36 +91,11 @@ export default async function DashboardPage() {
               company: lead.company.name,
               website: lead.company.website,
               email: lead.company.contactEmail,
-              game: lead.game.title,
-              stage: displayValue(lead.game.launchStage.replaceAll("_", " ")),
-              packages: displayList(parseJsonArray(lead.recommendedPackages)),
-              source: lead.article.source.name,
-              status: lead.status.replaceAll("_", " ")
+              game: lead.game.title
             }))}
           />
         </section>
       </div>
     </Shell>
   );
-}
-
-function parseJsonArray(value: string | null) {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function displayValue(value?: string | null) {
-  const normalized = value?.trim();
-  if (!normalized || normalized.toLowerCase() === "unknown") return "N/A";
-  return normalized;
-}
-
-function displayList(values: string[]) {
-  const usefulValues = values.map(displayValue).filter((value) => value !== "N/A");
-  return usefulValues.length ? usefulValues.join(", ") : "N/A";
 }

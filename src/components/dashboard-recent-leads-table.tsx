@@ -10,10 +10,6 @@ type DashboardRecentLeadRow = {
   website?: string | null;
   email?: string | null;
   game: string;
-  stage: string;
-  packages: string;
-  source: string;
-  status: string;
 };
 
 export function DashboardRecentLeadsTable({ leads }: { leads: DashboardRecentLeadRow[] }) {
@@ -29,10 +25,6 @@ export function DashboardRecentLeadsTable({ leads }: { leads: DashboardRecentLea
             <th className="lead-company-column">Company</th>
             <th className="lead-email-column">Email</th>
             <th className="lead-game-column">Game</th>
-            <th className="lead-stage-column">Stage</th>
-            <th className="lead-packages-column">Packages</th>
-            <th className="lead-source-column">Source</th>
-            <th className="lead-status-column">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -47,15 +39,11 @@ export function DashboardRecentLeadsTable({ leads }: { leads: DashboardRecentLea
               </td>
               <td>{lead.email ? <span className="truncate-cell">{lead.email}</span> : <span className="cell-subtle">N/A</span>}</td>
               <td>{lead.game}</td>
-              <td>{lead.stage}</td>
-              <td><span className="one-line-cell">{lead.packages}</span></td>
-              <td>{lead.source}</td>
-              <td>{lead.status}</td>
             </tr>
           ))}
           {leads.length === 0 ? (
             <tr>
-              <td colSpan={8}>No leads yet. Seed the database, crawl sources, or analyze sample articles.</td>
+              <td colSpan={4}>No leads yet. Seed the database, crawl sources, or analyze sample articles.</td>
             </tr>
           ) : null}
         </tbody>
